@@ -19,6 +19,7 @@ function AllocationModal({
   item: ItemWithAllocations
   onClose: () => void
   onSaved: () => void
+  onDeleted: () => void
 }) {
   const [rows, setRows] = useState<{ month: string; amount: string }[]>(() => {
     if (item.allocations.length > 0) {
@@ -39,9 +40,21 @@ function AllocationModal({
     }
     return []
   })
-  const [notes, setNotes]   = useState(item.notes ?? '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState<string | null>(null)
+  const [notes, setNotes]     = useState(item.notes ?? '')
+  const [saving, setSaving]   = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+
+  async function deleteItem() {
+    if (!confirm('Remove this item? This will also clear it from Sales Weekly.')) return
+    setDeleting(true)
+    await fetch('/api/remove-item', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: item.id }),
+    })
+    onDeleted()
+  }
 
   const allocatedTotal = rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
   const remaining      = (item.amount ?? 0) - allocatedTotal
@@ -200,6 +213,13 @@ function AllocationModal({
             className="px-4 py-2 rounded-xl text-sm font-medium text-[#6B7280] bg-white border border-[#EBEBEB] hover:border-[#D1D5DB] transition-all"
           >
             Cancel
+          </button>
+          <button
+            onClick={deleteItem}
+            disabled={deleting}
+            className="ml-auto px-4 py-2 rounded-xl text-sm font-medium text-[#E11D48] bg-white border border-[#FECDD3] hover:bg-[#FFF1F2] disabled:opacity-40 transition-all"
+          >
+            {deleting ? 'Removing…' : 'Remove item'}
           </button>
         </div>
       </div>
@@ -456,6 +476,7 @@ export default function WorkListPage() {
           item={selectedItem}
           onClose={() => setSelectedId(null)}
           onSaved={() => { setSelectedId(null); loadData() }}
+          onDeleted={() => { setSelectedId(null); loadData() }}
         />
       )}
     </div>
