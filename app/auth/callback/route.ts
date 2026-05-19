@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       }
     )
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+    console.log('[auth/callback] exchangeCodeForSession error:', error)
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser()
       const email = user?.email?.toLowerCase()
