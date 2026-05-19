@@ -23,8 +23,9 @@ export async function GET(request: NextRequest) {
         },
       }
     )
+    console.log('[auth/callback] cookies present:', cookieStore.getAll().map(c => c.name))
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    console.log('[auth/callback] exchangeCodeForSession error:', error)
+    console.log('[auth/callback] exchangeCodeForSession error:', JSON.stringify(error))
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser()
       const email = user?.email?.toLowerCase()
