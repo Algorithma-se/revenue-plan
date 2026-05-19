@@ -9,6 +9,8 @@ export interface RevenueItem {
   event_date: string | null
   synced_at: string
   notes: string | null
+  start_month: string | null  // 'YYYY-MM-DD'
+  end_month: string | null    // 'YYYY-MM-DD'
 }
 
 export interface RevenueAllocation {

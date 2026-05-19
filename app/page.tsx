@@ -20,9 +20,25 @@ function AllocationModal({
   onClose: () => void
   onSaved: () => void
 }) {
-  const [rows, setRows] = useState<{ month: string; amount: string }[]>(
-    item.allocations.map(a => ({ month: a.month.slice(0, 7), amount: String(a.amount) }))
-  )
+  const [rows, setRows] = useState<{ month: string; amount: string }[]>(() => {
+    if (item.allocations.length > 0) {
+      return item.allocations.map(a => ({ month: a.month.slice(0, 7), amount: String(a.amount) }))
+    }
+    // Prepopulate from start_month/end_month if no allocations yet
+    if (item.start_month && item.end_month) {
+      const months: string[] = []
+      let [y, m] = item.start_month.slice(0, 7).split('-').map(Number)
+      const [ey, em] = item.end_month.slice(0, 7).split('-').map(Number)
+      let i = 0
+      while ((y < ey || (y === ey && m <= em)) && i < 120) {
+        months.push(`${y}-${String(m).padStart(2, '0')}`)
+        m++; if (m > 12) { m = 1; y++ }; i++
+      }
+      const perMonth = months.length > 0 ? String(Math.round((item.amount ?? 0) / months.length)) : ''
+      return months.map(month => ({ month, amount: perMonth }))
+    }
+    return []
+  })
   const [notes, setNotes]   = useState(item.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
@@ -198,6 +214,20 @@ export default function WorkListPage() {
   const [loading,    setLoading]    = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'forecast' | 'booking'>('all')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  async function removeItem(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm('Remove this item? This will also clear it from Sales Weekly.')) return
+    setDeletingId(id)
+    await fetch('/api/remove-item', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: id }),
+    })
+    setDeletingId(null)
+    loadData()
+  }
 
   async function loadData() {
     const [{ data: itemsData }, { data: allocsData }] = await Promise.all([
@@ -299,11 +329,23 @@ export default function WorkListPage() {
                   </span>
                   <span className="font-semibold text-[#0F0F0F] truncate">{item.client_name ?? '—'}</span>
                 </div>
-                {isFullyAllocated ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-[#F0FDF4] text-[#16A34A] flex-shrink-0">✓ Done</span>
-                ) : isPartial ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-[#FFFBEB] text-[#B45309] flex-shrink-0">Partial</span>
-                ) : null}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {isFullyAllocated ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-[#F0FDF4] text-[#16A34A]">✓ Done</span>
+                  ) : isPartial ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-[#FFFBEB] text-[#B45309]">Partial</span>
+                  ) : null}
+                  <button
+                    onClick={e => removeItem(item.id, e)}
+                    disabled={deletingId === item.id}
+                    className="p-1 rounded-lg text-[#D1D5DB] hover:text-[#EF4444] hover:bg-[#FFF1F2] transition-colors disabled:opacity-40"
+                    title="Remove"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-3 text-xs text-[#6B7280]">
                 {item.rep_name && <span>{item.rep_name}</span>}
@@ -328,13 +370,14 @@ export default function WorkListPage() {
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Event date</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Synced</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Allocated</th>
+                <th className="px-5 py-3.5" />
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[#F9F9F8]">
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-5 py-3">
                         <div className="h-4 bg-[#F3F4F6] rounded-lg animate-pulse w-20" />
                       </td>
@@ -343,7 +386,7 @@ export default function WorkListPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
+                  <td colSpan={8} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
                     No items yet. Push a forecast or booking from Sales Weekly.
                   </td>
                 </tr>
@@ -386,6 +429,18 @@ export default function WorkListPage() {
                       ) : (
                         <span className="text-xs text-[#D1D5DB]">—</span>
                       )}
+                    </td>
+                    <td className="px-3 py-3.5">
+                      <button
+                        onClick={e => removeItem(item.id, e)}
+                        disabled={deletingId === item.id}
+                        className="p-1.5 rounded-lg text-[#D1D5DB] hover:text-[#EF4444] hover:bg-[#FFF1F2] transition-colors disabled:opacity-40"
+                        title="Remove"
+                      >
+                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 )
