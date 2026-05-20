@@ -76,8 +76,42 @@ export function PodSection({
   onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
 }) {
-  const [revenueOpen, setRevenueOpen] = useState(true)
-  const [costsOpen, setCostsOpen]     = useState(true)
+  const storageKey = `plan-collapse-${pod.id}`
+
+  const [revenueOpen, setRevenueOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) ?? '{}').revenueOpen ?? true
+    } catch { return true }
+  })
+  const [costsOpen, setCostsOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) ?? '{}').costsOpen ?? true
+    } catch { return true }
+  })
+
+  function toggleRevenue() {
+    setRevenueOpen(o => {
+      const next = !o
+      try {
+        const prev = JSON.parse(localStorage.getItem(storageKey) ?? '{}')
+        localStorage.setItem(storageKey, JSON.stringify({ ...prev, revenueOpen: next }))
+      } catch {}
+      return next
+    })
+  }
+
+  function toggleCosts() {
+    setCostsOpen(o => {
+      const next = !o
+      try {
+        const prev = JSON.parse(localStorage.getItem(storageKey) ?? '{}')
+        localStorage.setItem(storageKey, JSON.stringify({ ...prev, costsOpen: next }))
+      } catch {}
+      return next
+    })
+  }
 
   const [addingRevenue, setAddingRevenue]         = useState(false)
   const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
@@ -121,7 +155,7 @@ export function PodSection({
 
         {/* ── Revenue section header ─────────────────────────────────────────── */}
         <button
-          onClick={() => setRevenueOpen(o => !o)}
+          onClick={toggleRevenue}
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
@@ -198,7 +232,7 @@ export function PodSection({
 
         {/* ── Costs section header ───────────────────────────────────────────── */}
         <button
-          onClick={() => setCostsOpen(o => !o)}
+          onClick={toggleCosts}
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={costsOpen} />

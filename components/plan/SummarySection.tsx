@@ -34,6 +34,39 @@ function SummaryRow({ label, values, fy, months, color }: {
   )
 }
 
+function MarginPctRow({ label, revenue, margin, months }: {
+  label: string
+  revenue: number[]
+  margin:  number[]
+  months:  readonly string[]
+}) {
+  const pct   = (r: number, m: number) => r > 0 ? Math.round((m / r) * 100) : null
+  const color = (v: number | null) =>
+    v === null ? 'text-[#D1D5DB]' : v >= 20 ? 'text-[#16A34A]' : v >= 0 ? 'text-[#D97706]' : 'text-[#EF4444]'
+  const fmt   = (v: number | null) => v === null ? '—' : `${v}%`
+
+  const fyRev    = revenue.reduce((s, v) => s + v, 0)
+  const fyMargin = margin.reduce((s, v) => s + v, 0)
+  const fyPct    = pct(fyRev, fyMargin)
+
+  return (
+    <div className="grid border-b border-[#F3F4F6]" style={colStyle(months.length)}>
+      <div className="px-2 py-2 text-xs font-medium text-[#0F0F0F] truncate">{label}</div>
+      {months.map((m, i) => {
+        const v = pct(revenue[i], margin[i])
+        return (
+          <div key={m} className={`px-1 py-2 text-right text-xs font-semibold ${color(v)}`}>
+            {fmt(v)}
+          </div>
+        )
+      })}
+      <div className={`px-1 py-2 text-right text-xs font-semibold ${color(fyPct)}`}>
+        {fmt(fyPct)}
+      </div>
+    </div>
+  )
+}
+
 export function SummarySection({
   allRevenueRows, allCostRows, months,
 }: {
@@ -76,6 +109,7 @@ export function SummarySection({
       <SummaryRow label="Total revenue (A+B)" values={totalRevAB} fy={fyRevAB} months={months} />
       <SummaryRow label="Total cost" values={totalCosts} fy={fyCosts} months={months} />
       <SummaryRow label="Actual margin" values={actualMargin} fy={fyMargin} months={months} color={marginColor} />
+      <MarginPctRow label="Margin %" revenue={totalRevAB} margin={actualMargin} months={months} />
     </div>
   )
 }
