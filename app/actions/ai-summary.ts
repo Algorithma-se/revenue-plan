@@ -5,10 +5,14 @@ import Anthropic from '@anthropic-ai/sdk'
 export interface AISummaryInput {
   currentMonth: string              // 'YYYY-MM-01'
   months: string[]
-  revenueABByMonth: number[]        // A+B revenue in SEK
-  forecastByMonth: number[]         // F-only revenue in SEK
-  costsByMonth: number[]
-  targetsByMonth: number[]
+  revenueABByMonth: number[]        // A+B (confirmed+booked) in SEK
+  forecastByMonth:  number[]        // F-only in SEK
+  costsByMonth:     number[]
+  topClients: {
+    name: string
+    abTotal: number   // A+B SEK across the FY
+    fTotal:  number   // Forecast SEK across the FY
+  }[]
 }
 
 export async function getAISummary(input: AISummaryInput): Promise<string> {
@@ -17,62 +21,45 @@ export async function getAISummary(input: AISummaryInput): Promise<string> {
 
   const client = new Anthropic({ apiKey: key })
 
-  const { currentMonth, months, revenueABByMonth, forecastByMonth, costsByMonth, targetsByMonth } = input
+  const { currentMonth, months, revenueABByMonth, forecastByMonth, costsByMonth, topClients } = input
 
   const fmt = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
 
-  const currentIdx = months.findIndex(m => m >= currentMonth)
-  const pastMonths = months.slice(0, Math.max(0, currentIdx))
-  const futureMonths = months.slice(currentIdx)
+  const currentIdx    = months.findIndex(m => m >= currentMonth)
+  const curRevAB      = currentIdx >= 0 ? revenueABByMonth[currentIdx] : 0
+  const curFC         = currentIdx >= 0 ? forecastByMonth[currentIdx]  : 0
+  const curCosts      = currentIdx >= 0 ? costsByMonth[currentIdx]     : 0
+  const curMargin     = curRevAB - curCosts
+  const curMarginPct  = curRevAB > 0 ? Math.round((curMargin / curRevAB) * 100) : 0
 
-  // Determine quarter (Q1 = Aug-Oct, Q2 = Nov-Jan, Q3 = Feb-Apr, Q4 = May-Jul for FY)
-  const curMonth = new Date(currentMonth + 'T12:00:00')
-  const monthNum = curMonth.getMonth() + 1
-  const quarterMonths = monthNum >= 8  ? months.filter(m => { const n = new Date(m+'T12:00:00').getMonth()+1; return n >= 8 && n <= 10 })
-                      : monthNum >= 11 ? months.filter(m => { const n = new Date(m+'T12:00:00').getMonth()+1; return n >= 11 || n <= 1 })
-                      : monthNum >= 2  ? months.filter(m => { const n = new Date(m+'T12:00:00').getMonth()+1; return n >= 2 && n <= 4 })
-                      :                  months.filter(m => { const n = new Date(m+'T12:00:00').getMonth()+1; return n >= 5 && n <= 7 })
+  const fyRevAB      = revenueABByMonth.reduce((s, v) => s + v, 0)
+  const fyForecast   = forecastByMonth.reduce((s, v) => s + v, 0)
+  const fyTotal      = fyRevAB + fyForecast
+  const fyCosts      = costsByMonth.reduce((s, v) => s + v, 0)
+  const fyMargin     = fyRevAB - fyCosts
+  const fyMarginPct  = fyRevAB > 0 ? Math.round((fyMargin / fyRevAB) * 100) : 0
 
-  const qRevAB = quarterMonths.reduce((s, m) => {
-    const i = months.indexOf(m)
-    return s + (i >= 0 ? revenueABByMonth[i] : 0)
-  }, 0)
-  const qTarget = quarterMonths.reduce((s, m) => {
-    const i = months.indexOf(m)
-    return s + (i >= 0 ? targetsByMonth[i] : 0)
-  }, 0)
-  const qCosts = quarterMonths.reduce((s, m) => {
-    const i = months.indexOf(m)
-    return s + (i >= 0 ? costsByMonth[i] : 0)
-  }, 0)
+  const monthNames = months.map(m =>
+    new Date(m + 'T12:00:00').toLocaleString('en-SE', { month: 'short', year: '2-digit' })
+  )
 
-  const fyRevAB    = revenueABByMonth.reduce((s, v) => s + v, 0)
-  const fyForecast = forecastByMonth.reduce((s, v) => s + v, 0)
-  const fyTarget   = targetsByMonth.reduce((s, v) => s + v, 0)
-  const fyCosts    = costsByMonth.reduce((s, v) => s + v, 0)
-  const fyTotal    = fyRevAB + fyForecast
-
-  const curRevAB  = currentIdx >= 0 ? revenueABByMonth[currentIdx] : 0
-  const curTarget = currentIdx >= 0 ? targetsByMonth[currentIdx] : 0
-  const curFC     = currentIdx >= 0 ? forecastByMonth[currentIdx] : 0
-
-  const monthNames = months.map(m => new Date(m + 'T12:00:00').toLocaleString('en-SE', { month: 'short', year: '2-digit' }))
+  const clientLines = topClients
+    .slice(0, 8)
+    .map(c => `  ${c.name}: ${fmt(c.abTotal)} A+B, ${fmt(c.fTotal)} FC`)
+    .join('\n')
 
   const lines = [
-    `Current month (${monthNames[currentIdx] ?? currentMonth}): A+B ${fmt(curRevAB)} kSEK, Forecast ${fmt(curFC)} kSEK, Target ${fmt(curTarget)} kSEK`,
-    `Quarter A+B total: ${fmt(qRevAB)} kSEK vs target ${fmt(qTarget)} kSEK, costs ${fmt(qCosts)} kSEK`,
-    `Full year A+B: ${fmt(fyRevAB)} kSEK, +Forecast: ${fmt(fyTotal)} kSEK, Target: ${fmt(fyTarget)} kSEK, Costs: ${fmt(fyCosts)} kSEK`,
-    pastMonths.length > 0
-      ? `Past months actuals: ${pastMonths.map((m, i) => `${monthNames[months.indexOf(m)]} ${fmt(revenueABByMonth[months.indexOf(m)])}`).join(', ')}`
-      : '',
+    `Current month (${monthNames[currentIdx] ?? currentMonth}): A+B revenue ${fmt(curRevAB)} kSEK, costs ${fmt(curCosts)} kSEK, margin ${fmt(curMargin)} kSEK (${curMarginPct}%)${curFC > 0 ? `, pipeline FC ${fmt(curFC)} kSEK` : ''}`,
+    `Full year A+B confirmed: ${fmt(fyRevAB)} kSEK, +Forecast: ${fmt(fyTotal)} kSEK, costs: ${fmt(fyCosts)} kSEK, margin: ${fmt(fyMargin)} kSEK (${fyMarginPct}%)`,
+    topClients.length > 0 ? `Top clients by FY revenue (A+B / Forecast kSEK):\n${clientLines}` : '',
   ].filter(Boolean).join('\n')
 
   const message = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 220,
+    max_tokens: 250,
     messages: [{
       role: 'user',
-      content: `You are a concise CFO assistant for Algorithma, a Swedish consulting firm. Analyze this financial data and write a 3-sentence executive summary. Sentence 1: current month vs plan. Sentence 2: quarter outlook. Sentence 3: full-year projection and key risk or highlight. Use kSEK numbers. Be direct and specific.\n\n${lines}`,
+      content: `You are a concise CFO assistant for Algorithma, a Swedish consulting firm. Write a 3-sentence executive summary. Focus on: (1) current-month profitability and margin health, (2) revenue concentration and client mix — highlight dependency risks or positive diversification, (3) full-year outlook based on confirmed and booked revenue. Use kSEK figures. Be direct and specific. Do not compare to any plan or target.\n\n${lines}`,
     }],
   })
 

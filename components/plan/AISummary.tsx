@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { getAISummary } from '@/app/actions/ai-summary'
-import type { RevenueRow, CostRow, PlanTarget } from '@/types/database'
+import type { RevenueRow, CostRow } from '@/types/database'
 import { sumCells, sumByStatus } from '@/lib/plan-utils'
 
 export function AISummary({
-  allRevenueRows, allCostRows, targets, months,
+  allRevenueRows, allCostRows, months,
 }: {
   allRevenueRows: RevenueRow[]
   allCostRows:    CostRow[]
-  targets:        PlanTarget[]
   months:         readonly string[]
 }) {
   const [summary, setSummary] = useState<string | null>(null)
@@ -22,15 +21,31 @@ export function AISummary({
 
     const today = new Date()
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-    const targetMap = Object.fromEntries(targets.map(t => [t.month, t.revenue_target]))
+
+    const topClients = allRevenueRows
+      .filter(r => r.client_name)
+      .map(r => ({
+        name: r.client_name!,
+        abTotal: months.reduce((s, m) => {
+          const cell = r.cells[m]
+          return s + (cell && (cell.status === 'A' || cell.status === 'B') ? cell.amount : 0)
+        }, 0),
+        fTotal: months.reduce((s, m) => {
+          const cell = r.cells[m]
+          return s + (cell && cell.status === 'F' ? cell.amount : 0)
+        }, 0),
+      }))
+      .filter(c => c.abTotal + c.fTotal > 0)
+      .sort((a, b) => (b.abTotal + b.fTotal) - (a.abTotal + a.fTotal))
+      .slice(0, 8)
 
     getAISummary({
       currentMonth,
       months: [...months],
-      revenueABByMonth:  months.map(m => sumByStatus(allRevenueRows, m, ['A', 'B'])),
-      forecastByMonth:   months.map(m => sumByStatus(allRevenueRows, m, ['F'])),
-      costsByMonth:      months.map(m => sumCells(allCostRows, m)),
-      targetsByMonth:    months.map(m => targetMap[m] ?? 0),
+      revenueABByMonth: months.map(m => sumByStatus(allRevenueRows, m, ['A', 'B'])),
+      forecastByMonth:  months.map(m => sumByStatus(allRevenueRows, m, ['F'])),
+      costsByMonth:     months.map(m => sumCells(allCostRows, m)),
+      topClients,
     })
       .then(text => { if (!cancelled) { setSummary(text); setLoading(false) } })
       .catch(() => { if (!cancelled) { setError(true); setLoading(false) } })

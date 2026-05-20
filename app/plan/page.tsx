@@ -9,7 +9,7 @@ import {
 } from '@/lib/plan-utils'
 import type {
   Pod, ManualRevenueItem, PlanRevenueCell,
-  CostItem, PlanCostCell, PlanTarget,
+  CostItem, PlanCostCell,
   RevenueRow, CostRow, PlanStatus,
 } from '@/types/database'
 import { PodSection } from '@/components/plan/PodSection'
@@ -24,7 +24,6 @@ interface PlanState {
   planRevCells: PlanRevenueCell[]
   costItems:    CostItem[]
   costCells:    PlanCostCell[]
-  targets:      PlanTarget[]   // used by AISummary only
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -43,14 +42,12 @@ export default function PlanPage() {
       { data: planRevCells },
       { data: costItems },
       { data: costCells },
-      { data: targets },
     ] = await Promise.all([
       supabase.from('pods').select('*').order('sort'),
       supabase.from('manual_revenue_items').select('*').order('sort'),
       supabase.from('plan_revenue_cells').select('*'),
       supabase.from('cost_items').select('*').order('sort'),
       supabase.from('plan_cost_cells').select('*'),
-      supabase.from('plan_targets').select('*').order('month'),
     ])
 
     setState({
@@ -59,7 +56,6 @@ export default function PlanPage() {
       planRevCells: (planRevCells ?? []) as PlanRevenueCell[],
       costItems:    (costItems ?? [])    as CostItem[],
       costCells:    (costCells ?? [])    as PlanCostCell[],
-      targets:      (targets ?? [])      as PlanTarget[],
     })
     setLoading(false)
   }, [])
@@ -293,7 +289,6 @@ export default function PlanPage() {
         <AISummary
           allRevenueRows={allRevenueRows}
           allCostRows={allCostRows}
-          targets={state.targets}
           months={months}
         />
 
