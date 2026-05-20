@@ -149,8 +149,8 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
         a: 'No. The two apps have independent access control. Removing an email here only prevents sign-in to the Revenue Plan.',
       },
       {
-        q: 'Can I add any Google account?',
-        a: 'Yes — enter any valid email address in the Manage Access page. The person will be able to sign in with that Google account once added.',
+        q: 'Who can be granted access?',
+        a: 'Only @algorithma.ai email addresses can be added. Attempting to add an outside email address will be rejected.',
       },
     ],
   },

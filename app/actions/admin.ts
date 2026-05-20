@@ -32,6 +32,7 @@ export async function addAllowedEmail(email: string): Promise<void> {
   await requireAuth()
   const normalized = email.trim().toLowerCase()
   if (!normalized.includes('@')) throw new Error('Invalid email')
+  if (!normalized.endsWith('@algorithma.ai')) throw new Error('Only @algorithma.ai email addresses can be added')
   const { error } = await adminClient()
     .from('allowed_emails')
     .upsert({ email: normalized }, { onConflict: 'email' })
