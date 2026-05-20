@@ -2,16 +2,19 @@
 
 import { useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
-import { FISCAL_MONTHS, sumCells, sumAllMonths, computeCB1 } from '@/lib/plan-utils'
+import { sumCells, sumAllMonths, computeCB1 } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
-import { RevenueItemModal } from './RevenueItemModal'
 import { CostItemModal } from './CostItemModal'
+import { ItemModal } from '@/components/ItemModal'
+import type { ItemModalSaveData } from '@/components/ItemModal'
 
-const COL_STYLE = { gridTemplateColumns: '200px repeat(12, 76px) 80px' }
+function colStyle(n: number) {
+  return { gridTemplateColumns: `200px repeat(${n}, 76px) 80px` }
+}
 
 function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: number }) {
   return (
-    <div className="grid border-t border-[#EBEBEB] bg-[#F9F9F8]" style={COL_STYLE}>
+    <div className="grid border-t border-[#EBEBEB] bg-[#F9F9F8]" style={colStyle(values.length)}>
       <div className="px-2 py-2 text-xs font-semibold text-[#0F0F0F] truncate">{label}</div>
       {values.map((v, i) => (
         <div key={i} className="px-1 py-2 text-right text-xs font-semibold text-[#0F0F0F]">
@@ -26,7 +29,7 @@ function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: 
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods,
+  pod, revenueRows, costRows, pods, months,
   onSaveManualAmount, onSaveManualStatus,
   onSaveAllocStatus, onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -36,6 +39,7 @@ export function PodSection({
   revenueRows: RevenueRow[]
   costRows: CostRow[]
   pods: Pod[]
+  months: readonly string[]
   onSaveManualAmount: (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus: (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveAllocStatus:  (itemId: string, month: string, status: PlanStatus) => Promise<void>
@@ -53,10 +57,31 @@ export function PodSection({
   const [addingCost, setAddingCost]               = useState(false)
   const [editingCostRow, setEditingCostRow]       = useState<CostRow | null>(null)
 
-  const revTotals  = FISCAL_MONTHS.map(m => sumCells(revenueRows, m))
-  const revFY      = sumAllMonths(revenueRows)
-  const costTotals = FISCAL_MONTHS.map(m => sumCells(costRows, m))
-  const costFY     = sumAllMonths(costRows)
+  const revTotals  = months.map(m => sumCells(revenueRows, m))
+  const revFY      = sumAllMonths(revenueRows, months)
+  const costTotals = months.map(m => sumCells(costRows, m))
+  const costFY     = sumAllMonths(costRows, months)
+
+  function revenueRowsForModal(row: RevenueRow): { month: string; amount: string }[] {
+    return Object.entries(row.cells)
+      .filter(([_, c]) => c.amount > 0)
+      .map(([month, c]) => ({ month: month.slice(0, 7), amount: String(Math.round(c.amount / 1000)) }))
+      .sort((a, b) => a.month.localeCompare(b.month))
+  }
+
+  function handleRevenueModalSave(row: RevenueRow | null, data: ItemModalSaveData) {
+    const cells = (data.rows ?? []).map(r => ({
+      month: r.month,
+      amount: r.amount,
+      status: 'F' as PlanStatus,
+    }))
+    if (row) {
+      return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, cells)
+    }
+    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, cells)
+  }
+
+  const CS = colStyle(months.length)
 
   return (
     <>
@@ -70,7 +95,7 @@ export function PodSection({
 
         {/* Revenue rows */}
         {revenueRows.map(row => (
-          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={COL_STYLE}>
+          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
             <div
               className={`px-2 py-1 flex flex-col justify-center min-w-0 ${row.kind === 'manual' ? 'cursor-pointer hover:text-[#61b5cc]' : ''}`}
               onClick={row.kind === 'manual' ? () => setEditingRevenueRow(row) : undefined}
@@ -82,7 +107,7 @@ export function PodSection({
                 <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>
               )}
             </div>
-            {FISCAL_MONTHS.map(m => {
+            {months.map(m => {
               const cell = row.cells[m]
               if (row.kind === 'manual') {
                 return (
@@ -105,9 +130,9 @@ export function PodSection({
               )
             })}
             <div className="px-1 py-1 flex items-center justify-end text-xs font-semibold text-[#0F0F0F]">
-              {sumAllMonths([row]) === 0
+              {sumAllMonths([row], months) === 0
                 ? <span className="text-[#D1D5DB]">—</span>
-                : Math.round(sumAllMonths([row]) / 1000).toLocaleString('sv-SE')}
+                : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
             </div>
           </div>
         ))}
@@ -133,14 +158,14 @@ export function PodSection({
 
         {/* Cost rows */}
         {costRows.map(row => (
-          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={COL_STYLE}>
+          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
             <div
               className="px-2 py-1 flex items-center text-xs text-[#6B7280] truncate cursor-pointer hover:text-[#61b5cc]"
               onClick={() => setEditingCostRow(row)}
             >
               {row.category}
             </div>
-            {FISCAL_MONTHS.map(m => {
+            {months.map(m => {
               const cell = row.cells[m]
               return (
                 <EditableCell
@@ -153,9 +178,9 @@ export function PodSection({
               )
             })}
             <div className="px-1 py-1 flex items-center justify-end text-xs font-semibold text-[#6B7280]">
-              {sumAllMonths([row]) === 0
+              {sumAllMonths([row], months) === 0
                 ? <span className="text-[#D1D5DB]">—</span>
-                : Math.round(sumAllMonths([row]) / 1000).toLocaleString('sv-SE')}
+                : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
             </div>
           </div>
         ))}
@@ -175,9 +200,9 @@ export function PodSection({
         <TotalRow label={`Total costs ${pod.name}`} values={costTotals} fy={costFY} />
 
         {/* CB1% */}
-        <div className="grid border-t border-[#EBEBEB]" style={COL_STYLE}>
+        <div className="grid border-t border-[#EBEBEB]" style={CS}>
           <div className="px-2 py-2 text-xs font-semibold text-[#9CA3AF]">CB1%</div>
-          {FISCAL_MONTHS.map((m, i) => {
+          {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
             return (
               <div key={m} className={`px-1 py-2 text-right text-xs font-semibold ${
@@ -203,27 +228,33 @@ export function PodSection({
         </div>
       </div>
 
+      {/* Add revenue modal */}
       {addingRevenue && (
-        <RevenueItemModal
-          mode="add"
+        <ItemModal
+          mode="manual"
           pods={pods}
-          defaultPodId={pod.id}
+          initialPodId={pod.id}
+          initialRows={[]}
           onClose={() => setAddingRevenue(false)}
-          onSave={async (client, project, podId, cells) => {
-            await onAddRevenue(client, project, podId, cells)
+          onSave={async data => {
+            await handleRevenueModalSave(null, data)
             setAddingRevenue(false)
           }}
         />
       )}
 
+      {/* Edit revenue modal */}
       {editingRevenueRow && (
-        <RevenueItemModal
-          mode="edit"
+        <ItemModal
+          mode="manual"
           pods={pods}
-          editRow={editingRevenueRow}
+          initialClientName={editingRevenueRow.client_name ?? ''}
+          initialProject={editingRevenueRow.project ?? ''}
+          initialPodId={editingRevenueRow.pod_id}
+          initialRows={revenueRowsForModal(editingRevenueRow)}
           onClose={() => setEditingRevenueRow(null)}
-          onSave={async (client, project, podId, cells) => {
-            await onEditRevenue(editingRevenueRow.id, client, project, podId, cells)
+          onSave={async data => {
+            await handleRevenueModalSave(editingRevenueRow, data)
             setEditingRevenueRow(null)
           }}
           onDelete={async () => {
@@ -233,10 +264,12 @@ export function PodSection({
         />
       )}
 
+      {/* Add cost modal */}
       {addingCost && (
         <CostItemModal
           mode="add"
           pods={pods}
+          months={months}
           defaultPodId={pod.id}
           onClose={() => setAddingCost(false)}
           onSave={async (category, podId, cells) => {
@@ -246,10 +279,12 @@ export function PodSection({
         />
       )}
 
+      {/* Edit cost modal */}
       {editingCostRow && (
         <CostItemModal
           mode="edit"
           pods={pods}
+          months={months}
           editRow={editingCostRow}
           onClose={() => setEditingCostRow(null)}
           onSave={async (category, podId, cells) => {

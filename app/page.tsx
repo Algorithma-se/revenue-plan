@@ -3,248 +3,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { RevenueItem, RevenueAllocation, Pod } from '@/types/database'
+import { ItemModal } from '@/components/ItemModal'
 
 interface ItemWithAllocations extends RevenueItem {
   allocations: RevenueAllocation[]
   allocatedTotal: number
-}
-
-// ── Allocation modal ──────────────────────────────────────────────────────────
-
-function AllocationModal({
-  item,
-  pods,
-  onClose,
-  onSaved,
-  onDeleted,
-}: {
-  item: ItemWithAllocations
-  pods: Pod[]
-  onClose: () => void
-  onSaved: () => void
-  onDeleted: () => void
-}) {
-  const [podId, setPodId] = useState<string | null>(item.pod_id ?? null)
-  const [rows, setRows] = useState<{ month: string; amount: string }[]>(() => {
-    if (item.allocations.length > 0) {
-      return item.allocations.map(a => ({ month: a.month.slice(0, 7), amount: String(a.amount) }))
-    }
-    // Prepopulate from start_month/end_month if no allocations yet
-    if (item.start_month && item.end_month) {
-      const months: string[] = []
-      let [y, m] = item.start_month.slice(0, 7).split('-').map(Number)
-      const [ey, em] = item.end_month.slice(0, 7).split('-').map(Number)
-      let i = 0
-      while ((y < ey || (y === ey && m <= em)) && i < 120) {
-        months.push(`${y}-${String(m).padStart(2, '0')}`)
-        m++; if (m > 12) { m = 1; y++ }; i++
-      }
-      const perMonth = months.length > 0 ? String(Math.round((item.amount ?? 0) / months.length)) : ''
-      return months.map(month => ({ month, amount: perMonth }))
-    }
-    return []
-  })
-  const [notes, setNotes]     = useState(item.notes ?? '')
-  const [saving, setSaving]   = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
-
-  async function deleteItem() {
-    if (!confirm('Remove this item? This will also clear it from Sales Weekly.')) return
-    setDeleting(true)
-    await fetch('/api/remove-item', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: item.id }),
-    })
-    onDeleted()
-  }
-
-  const allocatedTotal = rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
-  const remaining      = (item.amount ?? 0) - allocatedTotal
-
-  async function save() {
-    setSaving(true)
-    setError(null)
-    try {
-      await supabase.from('revenue_allocations').delete().eq('revenue_item_id', item.id)
-
-      const validRows = rows.filter(r => r.month && r.amount && parseFloat(r.amount) > 0)
-      if (validRows.length > 0) {
-        const { error: insertErr } = await supabase.from('revenue_allocations').insert(
-          validRows.map(r => ({
-            revenue_item_id: item.id,
-            month: r.month + '-01',
-            amount: parseFloat(r.amount),
-          }))
-        )
-        if (insertErr) throw insertErr
-      }
-
-      const updates: Record<string, unknown> = {}
-      if (notes !== (item.notes ?? '')) updates.notes = notes || null
-      if (podId !== (item.pod_id ?? null)) updates.pod_id = podId
-      if (Object.keys(updates).length > 0) {
-        await supabase.from('revenue_items').update(updates).eq('id', item.id)
-      }
-
-      onSaved()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const modalInput = "bg-[#F9F9F8] border border-[#EBEBEB] rounded-lg px-2.5 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent transition-all"
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-2xl border border-[#EBEBEB] p-6 w-full max-w-lg shadow-2xl shadow-black/10"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h2 className="text-sm font-semibold text-[#0F0F0F]">{item.client_name ?? 'Unknown client'}</h2>
-            <p className="text-xs text-[#6B7280] mt-0.5">
-              {item.rep_name && `${item.rep_name} · `}
-              {item.amount != null
-                ? `${item.amount.toLocaleString('sv-SE')} SEK`
-                : 'No amount'}
-              {' · '}
-              <span className={`font-semibold ${item.type === 'booking' ? 'text-[#16A34A]' : 'text-[#3B82F6]'}`}>
-                {item.type === 'booking' ? 'Booked' : 'FC'}
-              </span>
-              {item.event_date && ` · ${new Date(item.event_date).toLocaleDateString('sv-SE')}`}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-[#9CA3AF] hover:text-[#0F0F0F] hover:bg-[#F9F9F8] transition-colors flex-shrink-0"
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Pod */}
-        <div className="mb-4">
-          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
-          <select
-            value={podId ?? ''}
-            onChange={e => setPodId(e.target.value || null)}
-            className={`${modalInput} w-full`}
-          >
-            <option value="">No pod</option>
-            {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-
-        {/* Month rows */}
-        <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-2">Monthly allocation</p>
-        <div className="space-y-2 mb-3">
-          {rows.length === 0 && (
-            <p className="text-xs text-[#9CA3AF] py-1">No months added yet.</p>
-          )}
-          {rows.map((row, idx) => (
-            <div key={idx} className="flex gap-2 items-center">
-              <input
-                type="month"
-                value={row.month}
-                onChange={e => setRows(r => r.map((x, i) => i === idx ? { ...x, month: e.target.value } : x))}
-                className={`${modalInput} flex-1`}
-              />
-              <input
-                type="number"
-                min={0}
-                placeholder="Amount (SEK)"
-                value={row.amount}
-                onChange={e => setRows(r => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))}
-                className={`${modalInput} flex-1`}
-              />
-              <button
-                onClick={() => setRows(r => r.filter((_, i) => i !== idx))}
-                className="text-[#D1D5DB] hover:text-[#EF4444] transition-colors p-1 flex-shrink-0"
-                title="Remove"
-              >
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={() => setRows(r => [...r, { month: '', amount: '' }])}
-          className="text-sm text-[#61b5cc] hover:text-[#4a9ab8] font-medium flex items-center gap-1 mb-4 transition-colors"
-        >
-          <span className="text-base leading-none">+</span> Add month
-        </button>
-
-        {/* Running total */}
-        {item.amount != null && item.amount > 0 && rows.some(r => r.amount) && (
-          <div className="bg-[#F9F9F8] rounded-xl px-3 py-2.5 mb-4 flex items-center justify-between">
-            <span className="text-xs text-[#6B7280]">
-              Allocated: <span className="font-semibold text-[#0F0F0F]">{allocatedTotal.toLocaleString('sv-SE')} SEK</span>
-            </span>
-            <span className={`text-xs font-medium ${
-              remaining === 0 ? 'text-[#16A34A]' : remaining < 0 ? 'text-[#EF4444]' : 'text-[#6B7280]'
-            }`}>
-              {remaining === 0
-                ? '✓ Fully allocated'
-                : remaining > 0
-                  ? `${remaining.toLocaleString('sv-SE')} SEK remaining`
-                  : `${Math.abs(remaining).toLocaleString('sv-SE')} SEK over`}
-            </span>
-          </div>
-        )}
-
-        {/* Notes */}
-        <textarea
-          rows={2}
-          placeholder="Notes…"
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          className={`${modalInput} w-full resize-none mb-4`}
-        />
-
-        {error && (
-          <p className="text-xs text-[#E11D48] bg-[#FFF1F2] border border-[#FECDD3] rounded-xl px-3 py-2 mb-3">{error}</p>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
-            style={{ background: 'linear-gradient(135deg, #65deff 0%, #61b5cc 100%)' }}
-          >
-            {saving ? 'Saving…' : 'Save allocations'}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-medium text-[#6B7280] bg-white border border-[#EBEBEB] hover:border-[#D1D5DB] transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={deleteItem}
-            disabled={deleting}
-            className="ml-auto px-4 py-2 rounded-xl text-sm font-medium text-[#E11D48] bg-white border border-[#FECDD3] hover:bg-[#FFF1F2] disabled:opacity-40 transition-all"
-          >
-            {deleting ? 'Removing…' : 'Remove item'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -293,7 +56,7 @@ export default function WorkListPage() {
 
   useEffect(() => { loadData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = filterType === 'all' ? items : items.filter(i => i.type === filterType)
+  const filtered    = filterType === 'all' ? items : items.filter(i => i.type === filterType)
   const selectedItem = items.find(i => i.id === selectedId)
 
   const fcTotal        = items.filter(i => i.type === 'forecast').reduce((s, i) => s + (i.amount ?? 0), 0)
@@ -305,6 +68,28 @@ export default function WorkListPage() {
   const btnBase   = "px-3 py-1.5 rounded-full text-sm font-medium border transition-all"
   const btnIdle   = "bg-white border-[#EBEBEB] text-[#6B7280] hover:border-[#D1D5DB] hover:text-[#0F0F0F]"
   const btnActive = "bg-[#F9F9F8] border-[#D1D5DB] text-[#0F0F0F]"
+
+  // Build initial rows for modal — convert SEK→kSEK, or prepopulate from date range
+  function getInitialRows(item: ItemWithAllocations): { month: string; amount: string }[] {
+    if (item.allocations.length > 0) {
+      return item.allocations
+        .map(a => ({ month: a.month.slice(0, 7), amount: String(Math.round(a.amount / 1000)) }))
+        .sort((a, b) => a.month.localeCompare(b.month))
+    }
+    if (item.start_month && item.end_month) {
+      const months: string[] = []
+      let [y, m] = item.start_month.slice(0, 7).split('-').map(Number)
+      const [ey, em] = item.end_month.slice(0, 7).split('-').map(Number)
+      let i = 0
+      while ((y < ey || (y === ey && m <= em)) && i < 120) {
+        months.push(`${y}-${String(m).padStart(2, '0')}`)
+        m++; if (m > 12) { m = 1; y++ }; i++
+      }
+      const perMonthKSEK = months.length > 0 ? String(Math.round((item.amount ?? 0) / months.length / 1000)) : ''
+      return months.map(month => ({ month, amount: perMonthKSEK }))
+    }
+    return []
+  }
 
   return (
     <div>
@@ -392,7 +177,7 @@ export default function WorkListPage() {
               </div>
               <div className="flex items-center gap-3 text-xs text-[#6B7280]">
                 {item.rep_name && <span>{item.rep_name}</span>}
-                {item.amount != null && <span className="font-semibold text-[#0F0F0F]">{item.amount.toLocaleString('sv-SE')} SEK</span>}
+                {item.amount != null && <span className="font-semibold text-[#0F0F0F]">{fmtKSEK(item.amount)} kSEK</span>}
                 {item.event_date && <span>{new Date(item.event_date).toLocaleDateString('sv-SE')}</span>}
               </div>
             </div>
@@ -454,7 +239,7 @@ export default function WorkListPage() {
                     <td className="px-5 py-3.5 font-medium text-[#0F0F0F]">{item.client_name ?? '—'}</td>
                     <td className="px-5 py-3.5 text-[#6B7280]">{item.rep_name ?? '—'}</td>
                     <td className="px-5 py-3.5 text-right font-semibold text-[#0F0F0F] whitespace-nowrap">
-                      {item.amount != null ? `${item.amount.toLocaleString('sv-SE')} SEK` : '—'}
+                      {item.amount != null ? `${fmtKSEK(item.amount)} kSEK` : '—'}
                     </td>
                     <td className="px-5 py-3.5 text-[#6B7280] whitespace-nowrap">
                       {item.event_date ? new Date(item.event_date).toLocaleDateString('sv-SE') : '—'}
@@ -467,7 +252,7 @@ export default function WorkListPage() {
                         <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-[#F0FDF4] text-[#16A34A]">✓ Done</span>
                       ) : isPartial ? (
                         <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-[#FFFBEB] text-[#B45309]">
-                          {item.allocatedTotal.toLocaleString('sv-SE')} SEK
+                          {fmtKSEK(item.allocatedTotal)} kSEK
                         </span>
                       ) : (
                         <span className="text-xs text-[#D1D5DB]">—</span>
@@ -493,14 +278,50 @@ export default function WorkListPage() {
         </div>
       </div>
 
-      {/* Allocation modal */}
+      {/* Item modal */}
       {selectedItem && (
-        <AllocationModal
-          item={selectedItem}
+        <ItemModal
+          mode="synced"
+          displayName={selectedItem.client_name ?? 'Unknown client'}
+          subtitle={[
+            selectedItem.rep_name,
+            selectedItem.amount != null ? `${fmtKSEK(selectedItem.amount)} kSEK` : null,
+            selectedItem.type === 'booking' ? 'Booked' : 'FC',
+            selectedItem.event_date ? new Date(selectedItem.event_date).toLocaleDateString('sv-SE') : null,
+          ].filter(Boolean).join(' · ')}
           pods={pods}
+          initialPodId={selectedItem.pod_id ?? null}
+          initialRows={getInitialRows(selectedItem)}
+          referenceKSEK={selectedItem.amount != null ? Math.round(selectedItem.amount / 1000) : undefined}
+          initialNotes={selectedItem.notes ?? ''}
           onClose={() => setSelectedId(null)}
-          onSaved={() => { setSelectedId(null); loadData() }}
-          onDeleted={() => { setSelectedId(null); loadData() }}
+          onSave={async ({ podId, rows, notes }) => {
+            // Delete existing allocations and re-insert (amounts already in SEK from ItemModal)
+            await supabase.from('revenue_allocations').delete().eq('revenue_item_id', selectedItem.id)
+            if (rows.length > 0) {
+              const { error: insertErr } = await supabase.from('revenue_allocations').insert(
+                rows.map(r => ({ revenue_item_id: selectedItem.id, month: r.month, amount: r.amount }))
+              )
+              if (insertErr) throw insertErr
+            }
+            const updates: Record<string, unknown> = {}
+            if (notes !== (selectedItem.notes ?? '')) updates.notes = notes || null
+            if (podId !== (selectedItem.pod_id ?? null)) updates.pod_id = podId
+            if (Object.keys(updates).length > 0) {
+              await supabase.from('revenue_items').update(updates).eq('id', selectedItem.id)
+            }
+            setSelectedId(null)
+            loadData()
+          }}
+          onDelete={async () => {
+            await fetch('/api/remove-item', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_id: selectedItem.id }),
+            })
+            setSelectedId(null)
+            loadData()
+          }}
         />
       )}
     </div>

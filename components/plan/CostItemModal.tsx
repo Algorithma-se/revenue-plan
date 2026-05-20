@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { FISCAL_MONTHS, monthLabel } from '@/lib/plan-utils'
+import { monthLabel } from '@/lib/plan-utils'
 import type { PlanStatus, Pod, CostRow } from '@/types/database'
 
 const STATUS_COLORS: Record<PlanStatus, string> = {
@@ -23,6 +23,7 @@ interface MonthRow {
 export function CostItemModal({
   mode,
   pods,
+  months,
   defaultPodId,
   editRow,
   onClose,
@@ -31,6 +32,7 @@ export function CostItemModal({
 }: {
   mode: 'add' | 'edit'
   pods: Pod[]
+  months: readonly string[]
   defaultPodId?: string | null
   editRow?: CostRow
   onClose: () => void
@@ -40,7 +42,7 @@ export function CostItemModal({
   const [category, setCategory] = useState(editRow?.category ?? '')
   const [podId, setPodId]       = useState<string | null>(editRow?.pod_id ?? defaultPodId ?? null)
   const [rows, setRows]         = useState<MonthRow[]>(
-    FISCAL_MONTHS.map(m => {
+    months.map(m => {
       const cell = editRow?.cells[m]
       return { month: m, amount: cell && cell.amount > 0 ? String(Math.round(cell.amount / 1000)) : '', status: cell?.status ?? 'F' }
     })
@@ -64,7 +66,7 @@ export function CostItemModal({
     setError(null)
     try {
       const validRows = rows
-        .map(r => ({ month: r.month, amount: parseFloat(r.amount) * 1000, status: r.status }))
+        .map(r => ({ month: r.month, amount: Math.round(parseFloat(r.amount) * 1000), status: r.status }))
         .filter(r => !isNaN(r.amount) && r.amount > 0)
       await onSave(category.trim(), podId, validRows)
     } catch (e) {
@@ -144,6 +146,7 @@ export function CostItemModal({
               <input
                 type="number"
                 min={0}
+                step="any"
                 placeholder="—"
                 value={row.amount}
                 onChange={e => setAmount(row.month, e.target.value)}

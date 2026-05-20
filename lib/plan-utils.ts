@@ -10,6 +10,22 @@ export const FISCAL_MONTHS = [
   '2026-06-01', '2026-07-01',
 ] as const
 
+export function getFiscalMonths(fyStart: number): readonly string[] {
+  const months: string[] = []
+  for (let m = 8; m <= 12; m++) months.push(`${fyStart}-${String(m).padStart(2, '0')}-01`)
+  for (let m = 1; m <= 7; m++) months.push(`${fyStart + 1}-${String(m).padStart(2, '0')}-01`)
+  return months
+}
+
+export function fyLabel(fyStart: number): string {
+  return `FY ${String(fyStart).slice(2)}/${String(fyStart + 1).slice(2)}`
+}
+
+export function currentFyStart(): number {
+  const now = new Date()
+  return (now.getMonth() + 1) >= 8 ? now.getFullYear() : now.getFullYear() - 1
+}
+
 export function fmtKSEK(v: number): string {
   if (v === 0) return '—'
   return Math.round(v / 1000).toLocaleString('sv-SE')
@@ -17,10 +33,6 @@ export function fmtKSEK(v: number): string {
 
 export function monthLabel(isoDate: string): string {
   return new Date(isoDate + 'T12:00:00').toLocaleString('en-SE', { month: 'short' })
-}
-
-export function computeFullYear(cells: Record<string, { amount: number }>): number {
-  return FISCAL_MONTHS.reduce((sum, m) => sum + (cells[m]?.amount ?? 0), 0)
 }
 
 export function computeCB1(revenue: number, costs: number): number | null {
@@ -43,12 +55,13 @@ export function buildRevenueRows(
   allocStatuses: PlanAllocationStatus[],
   manualItems: ManualRevenueItem[],
   planRevCells: PlanRevenueCell[],
+  months: readonly string[] = FISCAL_MONTHS,
 ): RevenueRow[] {
   const syncedRows: RevenueRow[] = revenueItems
     .filter(item => item.pod_id === pod.id)
     .map(item => {
       const cells: Record<string, { amount: number; status: PlanStatus }> = {}
-      for (const m of FISCAL_MONTHS) {
+      for (const m of months) {
         const alloc = allocations.find(a => a.revenue_item_id === item.id && a.month === m)
         const st    = allocStatuses.find(s => s.revenue_item_id === item.id && s.month === m)
         cells[m] = {
@@ -64,7 +77,7 @@ export function buildRevenueRows(
     .sort((a, b) => a.sort - b.sort)
     .map(item => {
       const cells: Record<string, { amount: number; status: PlanStatus }> = {}
-      for (const m of FISCAL_MONTHS) {
+      for (const m of months) {
         const cell = planRevCells.find(c => c.manual_revenue_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
@@ -78,13 +91,14 @@ export function buildCostRows(
   pod: Pod,
   costItems: CostItem[],
   costCells: PlanCostCell[],
+  months: readonly string[] = FISCAL_MONTHS,
 ): CostRow[] {
   return costItems
     .filter(item => item.pod_id === pod.id)
     .sort((a, b) => a.sort - b.sort)
     .map(item => {
       const cells: Record<string, { amount: number; status: PlanStatus }> = {}
-      for (const m of FISCAL_MONTHS) {
+      for (const m of months) {
         const cell = costCells.find(c => c.cost_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
@@ -96,8 +110,11 @@ export function sumCells(rows: Array<{ cells: Record<string, { amount: number }>
   return rows.reduce((s, r) => s + (r.cells[month]?.amount ?? 0), 0)
 }
 
-export function sumAllMonths(rows: Array<{ cells: Record<string, { amount: number }> }>): number {
-  return FISCAL_MONTHS.reduce((s, m) => s + sumCells(rows, m), 0)
+export function sumAllMonths(
+  rows: Array<{ cells: Record<string, { amount: number }> }>,
+  months: readonly string[] = FISCAL_MONTHS,
+): number {
+  return months.reduce((s, m) => s + sumCells(rows, m), 0)
 }
 
 export function sumByStatus(

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
-  FISCAL_MONTHS, monthLabel, buildRevenueRows, buildCostRows,
-  sumCells, sumAllMonths, sumByStatus, fmtKSEK, computeCB1,
+  getFiscalMonths, fyLabel, currentFyStart,
+  monthLabel, buildRevenueRows, buildCostRows,
+  sumCells, sumAllMonths, fmtKSEK,
 } from '@/lib/plan-utils'
 import type {
   Pod, RevenueItem, RevenueAllocation, PlanAllocationStatus,
@@ -33,6 +34,9 @@ interface PlanState {
 export default function PlanPage() {
   const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fyStart, setFyStart] = useState(currentFyStart)
+
+  const months = getFiscalMonths(fyStart)
 
   const load = useCallback(async () => {
     const [
@@ -283,22 +287,45 @@ export default function PlanPage() {
   }
 
   const allRevenueRows: RevenueRow[] = state.pods.flatMap(pod =>
-    buildRevenueRows(pod, state.revenueItems, state.allocations, state.allocStatuses, state.manualItems, state.planRevCells)
+    buildRevenueRows(pod, state.revenueItems, state.allocations, state.allocStatuses, state.manualItems, state.planRevCells, months)
   )
   const allCostRows: CostRow[] = state.pods.flatMap(pod =>
-    buildCostRows(pod, state.costItems, state.costCells)
+    buildCostRows(pod, state.costItems, state.costCells, months)
   )
 
   return (
     <div className="min-h-screen bg-[#F9F9F8]">
       <div className="px-4 py-6 max-w-none">
 
-        {/* Title */}
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-[#0F0F0F] tracking-tight">
-            Algorithma monthly reporting
-          </h1>
-          <p className="text-xs text-[#9CA3AF] mt-0.5">Income statement (kSEK) · FY 25/26</p>
+        {/* Title + FY navigation */}
+        <div className="mb-6 flex items-end justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-[#0F0F0F] tracking-tight">
+              Algorithma monthly reporting
+            </h1>
+            <p className="text-xs text-[#9CA3AF] mt-0.5">Income statement (kSEK)</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setFyStart(y => y - 1)}
+              className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-white border border-transparent hover:border-[#EBEBEB] transition-all"
+              title="Previous fiscal year"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M9.707 3.293a1 1 0 010 1.414L6.414 8l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <span className="text-sm font-semibold text-[#0F0F0F] min-w-[72px] text-center">{fyLabel(fyStart)}</span>
+            <button
+              onClick={() => setFyStart(y => y + 1)}
+              className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-white border border-transparent hover:border-[#EBEBEB] transition-all"
+              title="Next fiscal year"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M6.293 3.293a1 1 0 000 1.414L9.586 8l-3.293 3.293a1 1 0 001.414 1.414l4-4a1 1 0 000-1.414l-4-4a1 1 0 00-1.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Grid */}
@@ -306,9 +333,9 @@ export default function PlanPage() {
           <div style={{ minWidth: '1100px' }}>
 
             {/* Month header */}
-            <div className="grid mb-1" style={{ gridTemplateColumns: '200px repeat(12, 76px) 80px' }}>
+            <div className="grid mb-1" style={{ gridTemplateColumns: `200px repeat(${months.length}, 76px) 80px` }}>
               <div className="px-2 py-1.5 text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">Pod / Item</div>
-              {FISCAL_MONTHS.map(m => (
+              {months.map(m => (
                 <div key={m} className="px-1 py-1.5 text-center text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">
                   {monthLabel(m)}
                 </div>
@@ -320,15 +347,16 @@ export default function PlanPage() {
             {state.pods.map(pod => {
               const revenueRows = buildRevenueRows(
                 pod, state.revenueItems, state.allocations, state.allocStatuses,
-                state.manualItems, state.planRevCells
+                state.manualItems, state.planRevCells, months
               )
-              const costRows = buildCostRows(pod, state.costItems, state.costCells)
+              const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
 
               return (
                 <PodSection
                   key={pod.id}
                   pod={pod}
                   pods={state.pods}
+                  months={months}
                   revenueRows={revenueRows}
                   costRows={costRows}
                   onSaveManualAmount={(itemId, month, status, amount) =>
@@ -360,6 +388,7 @@ export default function PlanPage() {
               allRevenueRows={allRevenueRows}
               allCostRows={allCostRows}
               targets={state.targets}
+              months={months}
               onSaveTarget={(month, amount) => saveTarget(month, amount)}
             />
           </div>
