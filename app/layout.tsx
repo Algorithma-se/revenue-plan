@@ -3,7 +3,7 @@ import Header from '@/components/Header'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Revenue Plan',
+  title: 'Algorithma Revenue Plan',
   description: 'Revenue forecasting and P&L allocation',
 }
 

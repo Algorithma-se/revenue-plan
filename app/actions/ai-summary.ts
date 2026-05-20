@@ -11,10 +11,10 @@ export interface AISummaryInput {
   costsByMonth:     number[]
   topClients: {
     name: string
-    abTotal:   number   // A+B SEK across the FY
-    fTotal:    number   // Forecast SEK across the FY
-    currentAB: number   // A+B SEK this month
-    currentF:  number   // Forecast SEK this month
+    abTotal:   number
+    fTotal:    number
+    currentAB: number
+    currentF:  number
   }[]
 }
 
@@ -45,13 +45,12 @@ export async function getAISummary(input: AISummaryInput, force = false): Promis
 
   const fmt = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
 
-  const currentIdx   = months.findIndex(m => m >= currentMonth)
-  const curRevAB     = currentIdx >= 0 ? revenueABByMonth[currentIdx] : 0
-  const curFC        = currentIdx >= 0 ? forecastByMonth[currentIdx]  : 0
-  const curCosts     = currentIdx >= 0 ? costsByMonth[currentIdx]     : 0
-  const curMargin    = curRevAB - curCosts
-  const curMarginPct = curRevAB > 0 ? Math.round((curMargin / curRevAB) * 100) : 0
-
+  const currentIdx        = months.findIndex(m => m >= currentMonth)
+  const curRevAB          = currentIdx >= 0 ? revenueABByMonth[currentIdx] : 0
+  const curFC             = currentIdx >= 0 ? forecastByMonth[currentIdx]  : 0
+  const curCosts          = currentIdx >= 0 ? costsByMonth[currentIdx]     : 0
+  const curMargin         = curRevAB - curCosts
+  const curMarginPct      = curRevAB > 0 ? Math.round((curMargin / curRevAB) * 100) : 0
   const activeClientCount = topClients.filter(c => c.currentAB > 0).length
 
   const monthName = new Date(currentMonth + 'T12:00:00').toLocaleString('en-SE', { month: 'long', year: 'numeric' })
@@ -59,30 +58,36 @@ export async function getAISummary(input: AISummaryInput, force = false): Promis
   const clientLines = topClients
     .filter(c => c.currentAB + c.currentF > 0)
     .slice(0, 8)
-    .map(c => `  ${c.name}: ${fmt(c.currentAB)} A+B this month, ${fmt(c.abTotal)} FY A+B`)
+    .map(c => `  ${c.name}: ${fmt(c.currentAB)} A+B this month`)
     .join('\n')
 
-  const prompt = `You are a concise CFO assistant for Algorithma, a Swedish consulting firm. Write a 3-sentence executive summary for the CURRENT MONTH ONLY.
+  const prompt = `You are a concise CFO assistant for Algorithma, a Swedish consulting firm.
 
-Benchmarks: margin above 20% is healthy; below 20% is a concern. Monthly costs at or below 2200 kSEK is good. Client diversification (many active clients) reduces concentration risk.
+Reply with exactly this format — no other text, no markdown bold (**), no backticks:
+Line 1: a single sharp tagline sentence about this month's financial health (honest, direct)
+Line 2: • [revenue: amount and whether it looks strong or light]
+Line 3: • [costs: amount vs 2200 kSEK benchmark — good if ≤2200, concern if above]
+Line 4: • [margin: ${curMarginPct}% vs 20% benchmark — good if ≥20%, concern if below, alarm if negative]
+Line 5: • [client mix: ${activeClientCount} active clients — comment on concentration risk or healthy diversification]
+${curFC > 0 ? 'Line 6: • [pipeline: FC amount and near-term visibility comment]' : ''}
 
-Focus on: (1) this month's revenue, cost level vs. 2200 kSEK, and margin vs. 20% — state clearly whether each is good or a concern; (2) client mix — number of active clients this month, any concentration risk worth flagging; (3) if pipeline (FC) is material, one brief note on near-term visibility. Use kSEK. Be direct and specific. Do not mention targets or plans. Do not summarize the full year.
+Plain text only. No bold. No bullet symbols other than the • character. Current month only.
 
 Current month (${monthName}):
   Revenue A+B: ${fmt(curRevAB)} kSEK
   Pipeline FC: ${fmt(curFC)} kSEK
   Costs: ${fmt(curCosts)} kSEK (benchmark: ≤2200 kSEK)
   Margin: ${fmt(curMargin)} kSEK / ${curMarginPct}% (benchmark: >20%)
-  Active clients this month (A+B > 0): ${activeClientCount}
+  Active clients this month: ${activeClientCount}
 
-Client breakdown (this month A+B / FY A+B in kSEK):
+Client breakdown (this month A+B kSEK):
 ${clientLines || '  (no client data)'}`
 
   const client = new Anthropic({ apiKey: key })
 
   const message = await client.messages.create({
     model:      'claude-haiku-4-5-20251001',
-    max_tokens: 250,
+    max_tokens: 300,
     messages:   [{ role: 'user', content: prompt }],
   })
 

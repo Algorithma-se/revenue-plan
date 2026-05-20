@@ -40,6 +40,12 @@ export default function WorkListPage() {
     loadData()
   }
 
+  async function markProcessed(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    await supabase.from('revenue_items').update({ status: 'processed' }).eq('id', id)
+    loadData()
+  }
+
   async function loadData() {
     const [{ data: itemsData }, { data: allocsData }, { data: podsData }] = await Promise.all([
       supabase.from('revenue_items').select('*').order('synced_at', { ascending: false }),
@@ -225,6 +231,15 @@ export default function WorkListPage() {
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-[#FFFBEB] text-[#B45309]">Partial</span>
                   ) : null}
                   <button
+                    onClick={e => markProcessed(item.id, e)}
+                    className="p-1 rounded-lg text-[#D1D5DB] hover:text-[#16A34A] hover:bg-[#F0FDF4] transition-colors"
+                    title="Mark as processed (already in Revenue Plan)"
+                  >
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                      <path fillRule="evenodd" d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z" clipRule="evenodd"/>
+                    </svg>
+                  </button>
+                  <button
                     onClick={e => removeItem(item.id, e)}
                     disabled={deletingId === item.id}
                     className="p-1 rounded-lg text-[#D1D5DB] hover:text-[#EF4444] hover:bg-[#FFF1F2] transition-colors disabled:opacity-40"
@@ -320,16 +335,27 @@ export default function WorkListPage() {
                       )}
                     </td>
                     <td className="px-3 py-3.5">
-                      <button
-                        onClick={e => removeItem(item.id, e)}
-                        disabled={deletingId === item.id}
-                        className="p-1.5 rounded-lg text-[#D1D5DB] hover:text-[#EF4444] hover:bg-[#FFF1F2] transition-colors disabled:opacity-40"
-                        title="Remove"
-                      >
-                        <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={e => markProcessed(item.id, e)}
+                          className="p-1.5 rounded-lg text-[#D1D5DB] hover:text-[#16A34A] hover:bg-[#F0FDF4] transition-colors"
+                          title="Mark as processed (already in Revenue Plan)"
+                        >
+                          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                            <path fillRule="evenodd" d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z" clipRule="evenodd"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={e => removeItem(item.id, e)}
+                          disabled={deletingId === item.id}
+                          className="p-1.5 rounded-lg text-[#D1D5DB] hover:text-[#EF4444] hover:bg-[#FFF1F2] transition-colors disabled:opacity-40"
+                          title="Remove"
+                        >
+                          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

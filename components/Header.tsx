@@ -52,18 +52,17 @@ export default function Header() {
         {/* Wordmark */}
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2.5">
-            <span
-              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #65deff 0%, #61b5cc 100%)' }}
-            >
-              {/* Replace this span with <Image src="/logo.svg" ... /> once a logo file is added */}
-              <svg viewBox="0 0 20 20" fill="white" className="w-3.5 h-3.5">
-                <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-              </svg>
-            </span>
+            <Image
+              src="/logo.svg"
+              alt="Algorithma"
+              width={20}
+              height={20}
+              className="w-5 h-5 flex-shrink-0"
+              style={{ color: '#61b5cc' }}
+            />
             <span className="font-semibold text-[14px] tracking-tight text-[#0F0F0F]">
-              Algorithma
-              <span className="text-[#6B7280] font-normal ml-1.5 hidden sm:inline">Revenue Plan</span>
+              algorithma
+              <span className="text-[#6B7280] font-normal ml-1.5 hidden sm:inline">| Revenue Plan</span>
             </span>
           </div>
 

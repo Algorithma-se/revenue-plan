@@ -52,17 +52,11 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#F9F9F8] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
-          <span
-            className="w-8 h-8 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #65deff 0%, #61b5cc 100%)' }}
-          >
-            <svg viewBox="0 0 20 20" fill="white" className="w-4 h-4">
-              <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-            </svg>
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Algorithma" className="w-7 h-7" style={{ color: '#61b5cc' }} />
           <span className="font-semibold text-[15px] tracking-tight text-[#0F0F0F]">
-            Algorithma
-            <span className="text-[#6B7280] font-normal ml-1.5">Revenue Plan</span>
+            algorithma
+            <span className="text-[#6B7280] font-normal ml-1.5">| Revenue Plan</span>
           </span>
         </div>
 
