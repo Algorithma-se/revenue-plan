@@ -142,6 +142,13 @@ export default function Header() {
                       )}
                       <p className="text-[11px] text-[#9CA3AF] truncate">{user.email}</p>
                     </div>
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-[#0F0F0F] hover:bg-[#F9F9F8] transition-colors"
+                    >
+                      Manage access
+                    </Link>
                     <button
                       onClick={async () => {
                         setMenuOpen(false)

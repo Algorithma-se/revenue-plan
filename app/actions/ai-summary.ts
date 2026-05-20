@@ -4,10 +4,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase-server'
 
 export interface AISummaryInput {
-  currentMonth: string              // 'YYYY-MM-01'
+  currentMonth: string
   months: string[]
-  revenueABByMonth: number[]        // A+B (confirmed+booked) in SEK
-  forecastByMonth:  number[]        // F-only in SEK
+  revenueABByMonth: number[]
+  forecastByMonth:  number[]
   costsByMonth:     number[]
   topClients: {
     name: string
@@ -20,7 +20,7 @@ export interface AISummaryInput {
 
 export interface AISummaryResult {
   summary:     string
-  generatedAt: string   // ISO timestamp
+  generatedAt: string
 }
 
 // Fiscal quarters: Q1 Aug–Oct, Q2 Nov–Jan, Q3 Feb–Apr, Q4 May–Jul
@@ -32,30 +32,37 @@ function getFiscalQuarter(month: string): 1 | 2 | 3 | 4 {
   return 4
 }
 
+// Returns the ISO date (YYYY-MM-DD) of the Monday of the current week
+function currentWeekMonday(): string {
+  const today = new Date()
+  const day   = today.getDay()               // 0=Sun … 6=Sat
+  const diff  = day === 0 ? -6 : 1 - day    // back to Monday
+  const mon   = new Date(today)
+  mon.setDate(today.getDate() + diff)
+  return mon.toISOString().slice(0, 10)
+}
+
 export async function getAISummary(input: AISummaryInput, force = false): Promise<AISummaryResult> {
   const key = process.env.ANTHROPIC_API_KEY
   if (!key) throw new Error('ANTHROPIC_API_KEY not configured')
 
-  const today    = new Date()
-  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-
+  const weekKey  = currentWeekMonday()
   const supabase = await createServerSupabase()
 
   if (!force) {
     const { data } = await supabase
       .from('ai_summaries')
       .select('summary, generated_at')
-      .eq('month', monthKey)
+      .eq('month', weekKey)
       .maybeSingle()
     if (data) return { summary: data.summary, generatedAt: data.generated_at }
   }
 
   const { currentMonth, months, revenueABByMonth, forecastByMonth, costsByMonth, topClients } = input
 
-  const fmt = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
+  const fmt   = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
   const mName = (iso: string) => new Date(iso + 'T12:00:00').toLocaleString('en-SE', { month: 'short' })
 
-  // ── Current month ────────────────────────────────────────────────────────────
   const currentIdx        = months.findIndex(m => m >= currentMonth)
   const curRevAB          = currentIdx >= 0 ? revenueABByMonth[currentIdx] : 0
   const curFC             = currentIdx >= 0 ? forecastByMonth[currentIdx]  : 0
@@ -65,24 +72,21 @@ export async function getAISummary(input: AISummaryInput, force = false): Promis
   const activeClientCount = topClients.filter(c => c.currentAB > 0).length
   const monthName         = new Date(currentMonth + 'T12:00:00').toLocaleString('en-SE', { month: 'long', year: 'numeric' })
 
-  // ── Current quarter ──────────────────────────────────────────────────────────
-  const currentQ     = getFiscalQuarter(currentMonth)
-  const qMonths      = months.filter(m => getFiscalQuarter(m) === currentQ)
-  const qRevAB       = qMonths.reduce((s, m, i) => s + (revenueABByMonth[months.indexOf(m)] ?? 0), 0)
-  const qFC          = qMonths.reduce((s, m)    => s + (forecastByMonth[months.indexOf(m)]  ?? 0), 0)
-  const qCosts       = qMonths.reduce((s, m)    => s + (costsByMonth[months.indexOf(m)]     ?? 0), 0)
-  const qEnd         = qMonths[qMonths.length - 1]
-  const qMonthsLeft  = qMonths.filter(m => m > currentMonth).length
-  const qEndName     = qEnd ? mName(qEnd) : ''
+  const currentQ    = getFiscalQuarter(currentMonth)
+  const qMonths     = months.filter(m => getFiscalQuarter(m) === currentQ)
+  const qRevAB      = qMonths.reduce((s, m) => s + (revenueABByMonth[months.indexOf(m)] ?? 0), 0)
+  const qFC         = qMonths.reduce((s, m) => s + (forecastByMonth[months.indexOf(m)]  ?? 0), 0)
+  const qCosts      = qMonths.reduce((s, m) => s + (costsByMonth[months.indexOf(m)]     ?? 0), 0)
+  const qEnd        = qMonths[qMonths.length - 1]
+  const qMonthsLeft = qMonths.filter(m => m > currentMonth).length
+  const qEndName    = qEnd ? mName(qEnd) : ''
 
-  // ── Full fiscal year ─────────────────────────────────────────────────────────
-  const fyRevAB    = revenueABByMonth.reduce((s, v) => s + v, 0)
-  const fyFC       = forecastByMonth.reduce((s, v)  => s + v, 0)
-  const fyLastMonth = months[months.length - 1]  // always Jul
-  const fyYear     = fyLastMonth ? fyLastMonth.slice(0, 4) : String(today.getFullYear())
-  const fyEnd      = `31 Jul ${fyYear}`
+  const fyRevAB     = revenueABByMonth.reduce((s, v) => s + v, 0)
+  const fyFC        = forecastByMonth.reduce((s, v)  => s + v, 0)
+  const fyLastMonth = months[months.length - 1]
+  const fyYear      = fyLastMonth ? fyLastMonth.slice(0, 4) : String(new Date().getFullYear())
+  const fyEnd       = `31 Jul ${fyYear}`
 
-  // ── Client lines ─────────────────────────────────────────────────────────────
   const clientLines = topClients
     .filter(c => c.currentAB + c.currentF > 0)
     .slice(0, 8)
@@ -97,14 +101,14 @@ Line 2: • [revenue: ${fmt(curRevAB)} kSEK A+B — strong or light?]
 Line 3: • [costs: ${fmt(curCosts)} kSEK vs ≤2200 kSEK benchmark]
 Line 4: • [margin: ${curMarginPct}% vs >20% benchmark — good, concern, or alarm]
 Line 5: • [client mix: ${activeClientCount} active clients — concentration risk or healthy spread]
-Line 6: • [Q${currentQ} outlook: ${qMonthsLeft} month${qMonthsLeft !== 1 ? 's' : ''} left ending ${qEndName} — ${fmt(qRevAB)} kSEK confirmed, ${fmt(qFC)} kSEK pipeline; is the quarter on track?]
-Line 7: • [FY end (${fyEnd}): ${fmt(fyRevAB)} kSEK confirmed + ${fmt(fyFC)} kSEK pipeline = ${fmt(fyRevAB + fyFC)} kSEK total; brief honest read on year-end]
+Line 6: • [Q${currentQ} outlook: ${qMonthsLeft} month${qMonthsLeft !== 1 ? 's' : ''} left ending ${qEndName} — ${fmt(qRevAB)} kSEK confirmed, ${fmt(qFC)} kSEK pipeline; on track?]
+Line 7: • [FY end (${fyEnd}): ${fmt(fyRevAB)} kSEK confirmed + ${fmt(fyFC)} kSEK pipeline = ${fmt(fyRevAB + fyFC)} kSEK total; honest year-end read]
 
-Plain text only. No bold. No bullet symbols other than •. Be direct and specific.
+Plain text only. No bold. No bullet symbols other than •.
 
 Current month (${monthName}):
   Revenue A+B: ${fmt(curRevAB)} kSEK  |  Pipeline FC: ${fmt(curFC)} kSEK
-  Costs: ${fmt(curCosts)} kSEK (benchmark ≤2200)  |  Margin: ${fmt(curMargin)} kSEK / ${curMarginPct}% (benchmark >20%)
+  Costs: ${fmt(curCosts)} kSEK (≤2200 benchmark)  |  Margin: ${fmt(curMargin)} kSEK / ${curMarginPct}% (>20% benchmark)
   Active clients: ${activeClientCount}
 
 Q${currentQ} (ends ${qEndName}, ${qMonthsLeft} month${qMonthsLeft !== 1 ? 's' : ''} remaining):
@@ -113,11 +117,10 @@ Q${currentQ} (ends ${qEndName}, ${qMonthsLeft} month${qMonthsLeft !== 1 ? 's' : 
 Full year to ${fyEnd}:
   Confirmed A+B: ${fmt(fyRevAB)} kSEK  |  Pipeline FC: ${fmt(fyFC)} kSEK  |  Total: ${fmt(fyRevAB + fyFC)} kSEK
 
-Client breakdown (this month A+B kSEK):
-${clientLines || '  (no client data)'}`
+Client breakdown (this month):
+${clientLines || '  (no data)'}`
 
   const client = new Anthropic({ apiKey: key })
-
   const message = await client.messages.create({
     model:      'claude-haiku-4-5-20251001',
     max_tokens: 400,
@@ -131,7 +134,7 @@ ${clientLines || '  (no client data)'}`
   const generatedAt = new Date().toISOString()
   await supabase
     .from('ai_summaries')
-    .upsert({ month: monthKey, summary, generated_at: generatedAt }, { onConflict: 'month' })
+    .upsert({ month: weekKey, summary, generated_at: generatedAt }, { onConflict: 'month' })
 
   return { summary, generatedAt }
 }

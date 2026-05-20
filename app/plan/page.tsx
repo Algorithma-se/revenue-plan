@@ -15,6 +15,7 @@ import type {
 import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
 import { AISummary } from '@/components/plan/AISummary'
+import { PlanChart } from '@/components/plan/PlanChart'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
@@ -329,6 +330,7 @@ export default function PlanPage() {
                   key={pod.id}
                   pod={pod}
                   pods={state.pods}
+                  isNoPod={pod.name === 'Other NoPod'}
                   months={months}
                   revenueRows={revenueRows}
                   costRows={costRows}
@@ -362,6 +364,13 @@ export default function PlanPage() {
             />
           </div>
         </div>
+
+        {/* Trend chart */}
+        <PlanChart
+          allRevenueRows={allRevenueRows}
+          allCostRows={allCostRows}
+          months={months}
+        />
       </div>
     </div>
   )

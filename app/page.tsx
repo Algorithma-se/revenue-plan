@@ -67,7 +67,14 @@ export default function WorkListPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadData()
+    const channel = supabase
+      .channel('revenue_items_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'revenue_items' }, () => loadData())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Split by status (default 'active' for rows without the column yet)
   const activeItems    = items.filter(i => (i.status ?? 'active') === 'active')
@@ -160,9 +167,22 @@ export default function WorkListPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-[#0F0F0F] tracking-tight">Work List</h1>
-        <p className="text-sm text-[#6B7280] mt-1">Revenue pushed from Sales Weekly — allocate to months for P&L.</p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-[#0F0F0F] tracking-tight">Work List</h1>
+          <p className="text-sm text-[#6B7280] mt-1">Revenue pushed from Sales Weekly — allocate to months for P&L.</p>
+        </div>
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="mt-1 p-2 rounded-lg text-[#9CA3AF] hover:text-[#6B7280] hover:bg-white border border-transparent hover:border-[#EBEBEB] transition-all disabled:opacity-40"
+          title="Refresh"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}>
+            <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+          </svg>
+        </button>
       </div>
 
       {/* Hero tiles */}

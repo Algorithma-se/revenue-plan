@@ -6,6 +6,32 @@ import type { AISummaryResult } from '@/app/actions/ai-summary'
 import type { RevenueRow, CostRow } from '@/types/database'
 import { sumCells, sumByStatus } from '@/lib/plan-utils'
 
+const LOCAL_CACHE_KEY = 'alg-ai-summary-v1'
+
+function getMondayKey(): string {
+  const today = new Date()
+  const day   = today.getDay()
+  const diff  = day === 0 ? -6 : 1 - day
+  const mon   = new Date(today)
+  mon.setDate(today.getDate() + diff)
+  return mon.toISOString().slice(0, 10)
+}
+
+function readLocalCache(): AISummaryResult | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_CACHE_KEY)
+    if (!raw) return null
+    const { weekKey, result } = JSON.parse(raw)
+    return weekKey === getMondayKey() ? result : null
+  } catch { return null }
+}
+
+function writeLocalCache(result: AISummaryResult) {
+  try {
+    localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify({ weekKey: getMondayKey(), result }))
+  } catch {}
+}
+
 function buildInput(
   allRevenueRows: RevenueRow[],
   allCostRows: CostRow[],
@@ -46,7 +72,6 @@ function buildInput(
   }
 }
 
-// Parses "tagline\n• bullet\n• bullet" format; returns null for legacy prose
 function parseSummary(text: string): { tagline: string | null; bullets: string[] } | null {
   const lines   = text.split('\n').map(l => l.trim()).filter(Boolean)
   const bullets = lines.filter(l => l.startsWith('• '))
@@ -83,9 +108,26 @@ export function AISummary({
 
   useEffect(() => {
     let cancelled = false
+
+    // Serve from localStorage immediately if same week
+    const local = readLocalCache()
+    if (local) {
+      setResult(local)
+      setLoading(false)
+      return
+    }
+
+    // Otherwise fetch (server checks DB cache, only calls AI on miss)
     getAISummary(buildInput(allRevenueRows, allCostRows, months))
-      .then(r  => { if (!cancelled) { setResult(r);  setLoading(false) } })
+      .then(r => {
+        if (!cancelled) {
+          writeLocalCache(r)
+          setResult(r)
+          setLoading(false)
+        }
+      })
       .catch(() => { if (!cancelled) { setError(true); setLoading(false) } })
+
     return () => { cancelled = true }
   }, []) // intentionally run once on mount
 
@@ -94,6 +136,7 @@ export function AISummary({
     setError(false)
     try {
       const r = await getAISummary(buildInput(allRevenueRows, allCostRows, months), true)
+      writeLocalCache(r)
       setResult(r)
     } catch {
       setError(true)
@@ -180,7 +223,6 @@ export function AISummary({
           </ul>
         </div>
       ) : (
-        // Legacy prose format fallback
         <p className={`text-sm text-[#374151] leading-relaxed transition-opacity ${regenerating ? 'opacity-40' : 'opacity-100'}`}>
           {result?.summary}
         </p>

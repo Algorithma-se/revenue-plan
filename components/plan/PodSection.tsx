@@ -54,7 +54,7 @@ function TotalRow({ label, values, fy, accent }: {
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months,
+  pod, revenueRows, costRows, pods, months, isNoPod,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -65,6 +65,7 @@ export function PodSection({
   costRows: CostRow[]
   pods: Pod[]
   months: readonly string[]
+  isNoPod?: boolean
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
@@ -159,7 +160,7 @@ export function PodSection({
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{isNoPod ? 'Other Revenue' : 'Revenue'}</span>
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
@@ -236,7 +237,7 @@ export function PodSection({
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={costsOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{isNoPod ? 'Other Costs' : 'Costs'}</span>
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
@@ -298,7 +299,7 @@ export function PodSection({
         {!costsOpen && <TotalRow label="Total costs" values={costTotals} fy={costFY} />}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
-        <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
+        {!isNoPod && <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
           <div className="px-3 py-2 text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</div>
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
@@ -321,7 +322,7 @@ export function PodSection({
               return cb === null ? '—' : `${Math.round(cb)}%`
             })()}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* ── Modals ─────────────────────────────────────────────────────────────── */}
