@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import {
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import type { RevenueRow, CostRow } from '@/types/database'
@@ -99,19 +99,9 @@ export function PlanChart({
                   label={{ value: 'now', position: 'insideTopRight', fontSize: 10, fill: '#61b5cc', dy: -4 }}
                 />
               )}
-              <Line
-                yAxisId="kSEK" type="monotone" dataKey="Revenue"
-                stroke="#61b5cc" strokeWidth={2} dot={false} connectNulls
-              />
-              <Line
-                yAxisId="kSEK" type="monotone" dataKey="Costs"
-                stroke="#f97316" strokeWidth={2} dot={false} connectNulls
-              />
-              <Line
-                yAxisId="kSEK" type="monotone" dataKey="Profit"
-                stroke="#16a34a" strokeWidth={2} dot={false} connectNulls
-                strokeDasharray="4 2"
-              />
+              <Bar yAxisId="kSEK" dataKey="Revenue" fill="#61b5cc" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={32} />
+              <Bar yAxisId="kSEK" dataKey="Costs"   fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={32} />
+              <Bar yAxisId="kSEK" dataKey="Profit"  fill="#16a34a" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={32} />
               <Line
                 yAxisId="pct" type="monotone" dataKey="Margin %"
                 stroke="#8b5cf6" strokeWidth={1.5} dot={false} connectNulls
