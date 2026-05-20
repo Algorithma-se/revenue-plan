@@ -48,11 +48,15 @@ export function AddRevenueModal({
     if (!client.trim()) { setError('Client name is required.'); clientRef.current?.focus(); return }
     setSaving(true)
     setError(null)
-    const validRows = rows
-      .map(r => ({ month: r.month, amount: parseFloat(r.amount) * 1000, status: r.status }))
-      .filter(r => !isNaN(r.amount) && r.amount > 0)
-    await onSave(client.trim(), project.trim() || null, validRows)
-    setSaving(false)
+    try {
+      const validRows = rows
+        .map(r => ({ month: r.month, amount: parseFloat(r.amount) * 1000, status: r.status }))
+        .filter(r => !isNaN(r.amount) && r.amount > 0)
+      await onSave(client.trim(), project.trim() || null, validRows)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save. Has the migration been run in Supabase?')
+      setSaving(false)
+    }
   }
 
   const input = "bg-[#F9F9F8] border border-[#EBEBEB] rounded-xl px-3 py-2 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent transition-all"
@@ -117,6 +121,7 @@ export function AddRevenueModal({
                 className={`${input} flex-1 text-right py-1.5`}
               />
               <button
+                tabIndex={-1}
                 onClick={() => setStatus(row.month, cycleStatus(row.status))}
                 className={`text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0 cursor-pointer select-none transition-opacity hover:opacity-70 ${STATUS_COLORS[row.status]}`}
               >

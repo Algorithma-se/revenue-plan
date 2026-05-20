@@ -125,24 +125,25 @@ export default function PlanPage() {
     project: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
   ) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('manual_revenue_items')
       .insert({ pod_id: podId, client_name: clientName, project, sort: Date.now() })
       .select()
       .single()
-    if (!data) return
+    if (error || !data) {
+      console.error('[addManualItem] insert failed:', error?.message)
+      throw new Error(error?.message ?? 'Failed to add item')
+    }
     const newItem = data as ManualRevenueItem
-    setState(s => s ? ({ ...s, manualItems: [...s.manualItems, newItem] }) : s)
 
     if (cells.length > 0) {
-      const { data: inserted } = await supabase
+      await supabase
         .from('plan_revenue_cells')
         .insert(cells.map(c => ({ manual_revenue_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
-        .select()
-      if (inserted) {
-        setState(s => s ? ({ ...s, planRevCells: [...s.planRevCells, ...(inserted as PlanRevenueCell[])] }) : s)
-      }
     }
+
+    // Reload to ensure UI reflects DB state
+    await load()
   }
 
   async function addCostItem(podId: string, category: string) {
