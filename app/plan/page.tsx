@@ -243,8 +243,20 @@ export default function PlanPage() {
     )
   }
 
+  // Future FY: only show rows that have at least one B or F cell with amount > 0
+  const isFutureFY = fyStart > currentFyStart()
+  function filterFuture(rows: RevenueRow[]): RevenueRow[] {
+    if (!isFutureFY) return rows
+    return rows.filter(row =>
+      months.some(m => {
+        const cell = row.cells[m]
+        return cell && cell.amount > 0 && (cell.status === 'B' || cell.status === 'F')
+      })
+    )
+  }
+
   const allRevenueRows: RevenueRow[] = state.pods.flatMap(pod =>
-    buildRevenueRows(pod, state.manualItems, state.planRevCells, months)
+    filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
   )
   const allCostRows: CostRow[] = state.pods.flatMap(pod =>
     buildCostRows(pod, state.costItems, state.costCells, months)
@@ -309,7 +321,7 @@ export default function PlanPage() {
 
             {/* Pod sections */}
             {state.pods.map(pod => {
-              const revenueRows = buildRevenueRows(pod, state.manualItems, state.planRevCells, months)
+              const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
               const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
 
               return (
