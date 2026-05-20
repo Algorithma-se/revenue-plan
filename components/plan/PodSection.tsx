@@ -193,6 +193,8 @@ export function PodSection({
             <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
           </>
         )}
+        {/* Always show revenue total — visible even when section is collapsed */}
+        {!revenueOpen && <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />}
 
         {/* ── Costs section header ───────────────────────────────────────────── */}
         <button
@@ -258,6 +260,8 @@ export function PodSection({
             <TotalRow label="Total costs" values={costTotals} fy={costFY} />
           </>
         )}
+        {/* Always show cost total — visible even when section is collapsed */}
+        {!costsOpen && <TotalRow label="Total costs" values={costTotals} fy={costFY} />}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
         <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
