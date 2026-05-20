@@ -1,0 +1,112 @@
+import type {
+  Pod, RevenueItem, RevenueAllocation, PlanAllocationStatus,
+  ManualRevenueItem, PlanRevenueCell, CostItem, PlanCostCell,
+  PlanStatus, RevenueRow, CostRow,
+} from '@/types/database'
+
+export const FISCAL_MONTHS = [
+  '2025-08-01', '2025-09-01', '2025-10-01', '2025-11-01', '2025-12-01',
+  '2026-01-01', '2026-02-01', '2026-03-01', '2026-04-01', '2026-05-01',
+  '2026-06-01', '2026-07-01',
+] as const
+
+export function fmtKSEK(v: number): string {
+  if (v === 0) return '—'
+  return Math.round(v / 1000).toLocaleString('sv-SE')
+}
+
+export function monthLabel(isoDate: string): string {
+  return new Date(isoDate + 'T12:00:00').toLocaleString('en-SE', { month: 'short' })
+}
+
+export function computeFullYear(cells: Record<string, { amount: number }>): number {
+  return FISCAL_MONTHS.reduce((sum, m) => sum + (cells[m]?.amount ?? 0), 0)
+}
+
+export function computeCB1(revenue: number, costs: number): number | null {
+  if (revenue === 0) return null
+  return ((revenue - costs) / revenue) * 100
+}
+
+export function cycleStatus(s: PlanStatus): PlanStatus {
+  return s === 'F' ? 'B' : s === 'B' ? 'A' : 'F'
+}
+
+export function defaultStatus(item: RevenueItem): PlanStatus {
+  return item.type === 'booking' ? 'B' : 'F'
+}
+
+export function buildRevenueRows(
+  pod: Pod,
+  revenueItems: RevenueItem[],
+  allocations: RevenueAllocation[],
+  allocStatuses: PlanAllocationStatus[],
+  manualItems: ManualRevenueItem[],
+  planRevCells: PlanRevenueCell[],
+): RevenueRow[] {
+  const syncedRows: RevenueRow[] = revenueItems
+    .filter(item => item.pod_id === pod.id)
+    .map(item => {
+      const cells: Record<string, { amount: number; status: PlanStatus }> = {}
+      for (const m of FISCAL_MONTHS) {
+        const alloc = allocations.find(a => a.revenue_item_id === item.id && a.month === m)
+        const st    = allocStatuses.find(s => s.revenue_item_id === item.id && s.month === m)
+        cells[m] = {
+          amount: alloc?.amount ?? 0,
+          status: (st?.status as PlanStatus) ?? defaultStatus(item),
+        }
+      }
+      return { kind: 'synced' as const, id: item.id, client_name: item.client_name, pod_id: pod.id, cells }
+    })
+
+  const manualRows: RevenueRow[] = manualItems
+    .filter(item => item.pod_id === pod.id)
+    .sort((a, b) => a.sort - b.sort)
+    .map(item => {
+      const cells: Record<string, { amount: number; status: PlanStatus }> = {}
+      for (const m of FISCAL_MONTHS) {
+        const cell = planRevCells.find(c => c.manual_revenue_item_id === item.id && c.month === m)
+        cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
+      }
+      return { kind: 'manual' as const, id: item.id, client_name: item.client_name, pod_id: pod.id, cells }
+    })
+
+  return [...syncedRows, ...manualRows]
+}
+
+export function buildCostRows(
+  pod: Pod,
+  costItems: CostItem[],
+  costCells: PlanCostCell[],
+): CostRow[] {
+  return costItems
+    .filter(item => item.pod_id === pod.id)
+    .sort((a, b) => a.sort - b.sort)
+    .map(item => {
+      const cells: Record<string, { amount: number; status: PlanStatus }> = {}
+      for (const m of FISCAL_MONTHS) {
+        const cell = costCells.find(c => c.cost_item_id === item.id && c.month === m)
+        cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
+      }
+      return { id: item.id, pod_id: pod.id, category: item.category, sort: item.sort, cells }
+    })
+}
+
+export function sumCells(rows: Array<{ cells: Record<string, { amount: number }> }>, month: string): number {
+  return rows.reduce((s, r) => s + (r.cells[month]?.amount ?? 0), 0)
+}
+
+export function sumAllMonths(rows: Array<{ cells: Record<string, { amount: number }> }>): number {
+  return FISCAL_MONTHS.reduce((s, m) => s + sumCells(rows, m), 0)
+}
+
+export function sumByStatus(
+  rows: Array<{ cells: Record<string, { amount: number; status: PlanStatus }> }>,
+  month: string,
+  statuses: PlanStatus[],
+): number {
+  return rows.reduce((s, r) => {
+    const cell = r.cells[month]
+    return s + (cell && statuses.includes(cell.status) ? cell.amount : 0)
+  }, 0)
+}

@@ -51,6 +51,16 @@ export default function Header() {
             >
               Work List
             </Link>
+            <Link
+              href="/plan"
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                pathname === '/plan'
+                  ? 'bg-[#e6f8ff] text-[#61b5cc]'
+                  : 'text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#F9F9F8]'
+              }`}
+            >
+              P&amp;L Plan
+            </Link>
           </nav>
         </div>
 

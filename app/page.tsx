@@ -1,12 +1,42 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { RevenueItem, RevenueAllocation } from '@/types/database'
+import type { RevenueItem, RevenueAllocation, Pod } from '@/types/database'
 
 interface ItemWithAllocations extends RevenueItem {
   allocations: RevenueAllocation[]
   allocatedTotal: number
+}
+
+// ── Pod selector ──────────────────────────────────────────────────────────────
+
+function PodSelector({ item, pods }: { item: ItemWithAllocations; pods: Pod[] }) {
+  const [saving, setSaving] = useState(false)
+  const selectRef = useRef<HTMLSelectElement>(null)
+
+  async function handleChange(podId: string) {
+    setSaving(true)
+    await supabase
+      .from('revenue_items')
+      .update({ pod_id: podId || null })
+      .eq('id', item.id)
+    setSaving(false)
+  }
+
+  return (
+    <select
+      ref={selectRef}
+      defaultValue={item.pod_id ?? ''}
+      onChange={e => handleChange(e.target.value)}
+      disabled={saving}
+      onClick={e => e.stopPropagation()}
+      className="text-xs border border-[#EBEBEB] rounded-lg px-2 py-1 bg-[#F9F9F8] text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] disabled:opacity-50 max-w-[140px]"
+    >
+      <option value="">No pod</option>
+      {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+    </select>
+  )
 }
 
 // ── Allocation modal ──────────────────────────────────────────────────────────
@@ -15,6 +45,7 @@ function AllocationModal({
   item,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   item: ItemWithAllocations
   onClose: () => void
@@ -231,6 +262,7 @@ function AllocationModal({
 
 export default function WorkListPage() {
   const [items,      setItems]      = useState<ItemWithAllocations[]>([])
+  const [pods,       setPods]       = useState<Pod[]>([])
   const [loading,    setLoading]    = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'forecast' | 'booking'>('all')
@@ -250,10 +282,12 @@ export default function WorkListPage() {
   }
 
   async function loadData() {
-    const [{ data: itemsData }, { data: allocsData }] = await Promise.all([
+    const [{ data: itemsData }, { data: allocsData }, { data: podsData }] = await Promise.all([
       supabase.from('revenue_items').select('*').order('synced_at', { ascending: false }),
       supabase.from('revenue_allocations').select('*'),
+      supabase.from('pods').select('*').order('sort'),
     ])
+    setPods((podsData ?? []) as Pod[])
 
     const allocs = (allocsData ?? []) as RevenueAllocation[]
     const withAllocs: ItemWithAllocations[] = ((itemsData ?? []) as RevenueItem[]).map(item => {
@@ -367,10 +401,13 @@ export default function WorkListPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-[#6B7280]">
+              <div className="flex items-center gap-3 text-xs text-[#6B7280] mb-2">
                 {item.rep_name && <span>{item.rep_name}</span>}
                 {item.amount != null && <span className="font-semibold text-[#0F0F0F]">{item.amount.toLocaleString('sv-SE')} SEK</span>}
                 {item.event_date && <span>{new Date(item.event_date).toLocaleDateString('sv-SE')}</span>}
+              </div>
+              <div onClick={e => e.stopPropagation()}>
+                <PodSelector item={item} pods={pods} />
               </div>
             </div>
           )
@@ -386,6 +423,7 @@ export default function WorkListPage() {
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Type</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Client</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Rep</th>
+                <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Pod</th>
                 <th className="text-right px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Amount</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Event date</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Synced</th>
@@ -397,7 +435,7 @@ export default function WorkListPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[#F9F9F8]">
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 9 }).map((_, j) => (
                       <td key={j} className="px-5 py-3">
                         <div className="h-4 bg-[#F3F4F6] rounded-lg animate-pulse w-20" />
                       </td>
@@ -406,7 +444,7 @@ export default function WorkListPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
+                  <td colSpan={9} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
                     No items yet. Push a forecast or booking from Sales Weekly.
                   </td>
                 </tr>
@@ -430,6 +468,9 @@ export default function WorkListPage() {
                     </td>
                     <td className="px-5 py-3.5 font-medium text-[#0F0F0F]">{item.client_name ?? '—'}</td>
                     <td className="px-5 py-3.5 text-[#6B7280]">{item.rep_name ?? '—'}</td>
+                    <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                      <PodSelector item={item} pods={pods} />
+                    </td>
                     <td className="px-5 py-3.5 text-right font-semibold text-[#0F0F0F] whitespace-nowrap">
                       {item.amount != null ? `${item.amount.toLocaleString('sv-SE')} SEK` : '—'}
                     </td>
