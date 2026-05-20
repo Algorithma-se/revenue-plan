@@ -102,7 +102,7 @@ export function buildCostRows(
         const cell = costCells.find(c => c.cost_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
-      return { id: item.id, pod_id: pod.id, category: item.category, sort: item.sort, cells }
+      return { id: item.id, pod_id: pod.id, category: item.category, comment: item.comment ?? null, sort: item.sort, cells }
     })
 }
 

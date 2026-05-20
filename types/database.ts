@@ -68,6 +68,7 @@ export interface CostItem {
   id: string
   pod_id: string | null
   category: string
+  comment: string | null
   sort: number
   created_at: string
 }
@@ -101,6 +102,7 @@ export interface CostRow {
   id: string
   pod_id: string | null
   category: string
+  comment: string | null
   sort: number
   cells: Record<string, { amount: number; status: PlanStatus }>
 }

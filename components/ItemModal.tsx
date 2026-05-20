@@ -18,7 +18,7 @@ export function ItemModal({
   subtitle,
   // manual mode — editable header fields
   initialClientName,
-  initialProject,
+  initialComment,
   // shared
   pods,
   initialPodId,
@@ -33,7 +33,7 @@ export function ItemModal({
   displayName?:       string
   subtitle?:          string
   initialClientName?: string
-  initialProject?:    string
+  initialComment?:    string
   pods:               Pod[]
   initialPodId:       string | null
   initialRows:        { month: string; amount: string }[]
@@ -47,7 +47,7 @@ export function ItemModal({
   const [podId, setPodId]       = useState<string | null>(initialPodId)
   const [notes, setNotes]       = useState(initialNotes ?? '')
   const [clientName, setClient] = useState(initialClientName ?? '')
-  const [project, setProject]   = useState(initialProject ?? '')
+  const [project, setComment]   = useState(initialComment ?? '')
   const [saving, setSaving]     = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -123,11 +123,11 @@ export function ItemModal({
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Project</label>
+                  <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Comment</label>
                   <input
                     type="text"
                     value={project}
-                    onChange={e => setProject(e.target.value)}
+                    onChange={e => setComment(e.target.value)}
                     placeholder="Optional"
                     className={`${inp} w-full`}
                   />

@@ -31,8 +31,10 @@ function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: 
 export function PodSection({
   pod, revenueRows, costRows, pods, months,
   onSaveManualAmount, onSaveManualStatus,
-  onSaveAllocStatus, onSaveCostAmount, onSaveCostStatus,
+  onSaveAllocStatus, onSaveAllocAmount,
+  onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
+  onEditSyncedRevenue,
   onAddCost, onEditCost, onDeleteCost,
 }: {
   pod: Pod
@@ -40,17 +42,19 @@ export function PodSection({
   costRows: CostRow[]
   pods: Pod[]
   months: readonly string[]
-  onSaveManualAmount: (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
-  onSaveManualStatus: (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onSaveAllocStatus:  (itemId: string, month: string, status: PlanStatus) => Promise<void>
-  onSaveCostAmount:   (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
-  onSaveCostStatus:   (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onAddRevenue:    (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onEditRevenue:   (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onDeleteRevenue: (rowId: string) => Promise<void>
-  onAddCost:    (category: string, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onEditCost:   (rowId: string, category: string, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onDeleteCost: (rowId: string) => Promise<void>
+  onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
+  onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
+  onSaveAllocStatus:   (itemId: string, month: string, status: PlanStatus) => Promise<void>
+  onSaveAllocAmount:   (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
+  onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
+  onSaveCostStatus:    (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
+  onAddRevenue:        (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onDeleteRevenue:     (rowId: string) => Promise<void>
+  onEditSyncedRevenue: (rowId: string) => void
+  onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
+  onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
+  onDeleteCost:        (rowId: string) => Promise<void>
 }) {
   const [addingRevenue, setAddingRevenue]         = useState(false)
   const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
@@ -97,8 +101,8 @@ export function PodSection({
         {revenueRows.map(row => (
           <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
             <div
-              className={`px-2 py-1 flex flex-col justify-center min-w-0 ${row.kind === 'manual' ? 'cursor-pointer hover:text-[#61b5cc]' : ''}`}
-              onClick={row.kind === 'manual' ? () => setEditingRevenueRow(row) : undefined}
+              className="px-2 py-1 flex flex-col justify-center min-w-0 cursor-pointer hover:text-[#61b5cc] transition-colors"
+              onClick={() => row.kind === 'manual' ? setEditingRevenueRow(row) : onEditSyncedRevenue(row.id)}
             >
               <span className="text-xs text-[#0F0F0F] font-medium truncate" title={row.client_name ?? ''}>
                 {row.client_name ?? '—'}
@@ -125,6 +129,7 @@ export function PodSection({
                   key={m}
                   amount={cell.amount}
                   status={cell.status}
+                  onSaveAmount={v => onSaveAllocAmount(row.id, m, cell.status, v)}
                   onSaveStatus={s => onSaveAllocStatus(row.id, m, s)}
                 />
               )
@@ -160,10 +165,13 @@ export function PodSection({
         {costRows.map(row => (
           <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
             <div
-              className="px-2 py-1 flex items-center text-xs text-[#6B7280] truncate cursor-pointer hover:text-[#61b5cc]"
+              className="px-2 py-1 flex flex-col justify-center min-w-0 cursor-pointer hover:text-[#61b5cc] transition-colors"
               onClick={() => setEditingCostRow(row)}
             >
-              {row.category}
+              <span className="text-xs text-[#6B7280] truncate">{row.category}</span>
+              {row.comment && (
+                <span className="text-[10px] text-[#9CA3AF] truncate">{row.comment}</span>
+              )}
             </div>
             {months.map(m => {
               const cell = row.cells[m]
@@ -243,13 +251,13 @@ export function PodSection({
         />
       )}
 
-      {/* Edit revenue modal */}
+      {/* Edit manual revenue modal */}
       {editingRevenueRow && (
         <ItemModal
           mode="manual"
           pods={pods}
           initialClientName={editingRevenueRow.client_name ?? ''}
-          initialProject={editingRevenueRow.project ?? ''}
+          initialComment={editingRevenueRow.project ?? ''}
           initialPodId={editingRevenueRow.pod_id}
           initialRows={revenueRowsForModal(editingRevenueRow)}
           onClose={() => setEditingRevenueRow(null)}
@@ -269,11 +277,10 @@ export function PodSection({
         <CostItemModal
           mode="add"
           pods={pods}
-          months={months}
           defaultPodId={pod.id}
           onClose={() => setAddingCost(false)}
-          onSave={async (category, podId, cells) => {
-            await onAddCost(category, podId, cells)
+          onSave={async (category, comment, podId, cells) => {
+            await onAddCost(category, comment, podId, cells)
             setAddingCost(false)
           }}
         />
@@ -284,11 +291,10 @@ export function PodSection({
         <CostItemModal
           mode="edit"
           pods={pods}
-          months={months}
           editRow={editingCostRow}
           onClose={() => setEditingCostRow(null)}
-          onSave={async (category, podId, cells) => {
-            await onEditCost(editingCostRow.id, category, podId, cells)
+          onSave={async (category, comment, podId, cells) => {
+            await onEditCost(editingCostRow.id, category, comment, podId, cells)
             setEditingCostRow(null)
           }}
           onDelete={async () => {

@@ -14,6 +14,7 @@ import type {
 } from '@/types/database'
 import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
+import { ItemModal } from '@/components/ItemModal'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
@@ -34,7 +35,8 @@ interface PlanState {
 export default function PlanPage() {
   const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [fyStart, setFyStart] = useState(currentFyStart)
+  const [fyStart, setFyStart]           = useState(currentFyStart)
+  const [editingSyncedId, setEditingSyncedId] = useState<string | null>(null)
 
   const months = getFiscalMonths(fyStart)
 
@@ -100,6 +102,17 @@ export default function PlanPage() {
             a.revenue_item_id === itemId && a.month === month ? { ...a, status } : a
           )
         : [...s.allocStatuses, { id: crypto.randomUUID(), revenue_item_id: itemId, month, status }],
+    }) : s)
+  }
+
+  function updateAllocAmount(itemId: string, month: string, amount: number) {
+    setState(s => s ? ({
+      ...s,
+      allocations: s.allocations.some(a => a.revenue_item_id === itemId && a.month === month)
+        ? s.allocations.map(a =>
+            a.revenue_item_id === itemId && a.month === month ? { ...a, amount } : a
+          )
+        : [...s.allocations, { id: crypto.randomUUID(), revenue_item_id: itemId, month, amount, created_at: new Date().toISOString() }],
     }) : s)
   }
 
@@ -176,11 +189,12 @@ export default function PlanPage() {
   async function addCostItem(
     podId: string | null,
     category: string,
-    cells: { month: string; amount: number; status: PlanStatus }[],
+    comment: string | null,
+    cells: { month: string; amount: number }[],
   ) {
     const { data, error } = await supabase
       .from('cost_items')
-      .insert({ pod_id: podId, category, sort: Date.now() })
+      .insert({ pod_id: podId, category, comment, sort: Date.now() })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add cost item')
@@ -188,7 +202,7 @@ export default function PlanPage() {
     if (cells.length > 0) {
       await supabase
         .from('plan_cost_cells')
-        .insert(cells.map(c => ({ cost_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
+        .insert(cells.map(c => ({ cost_item_id: newItem.id, month: c.month, amount: c.amount, status: 'F' })))
     }
     await load()
   }
@@ -196,18 +210,19 @@ export default function PlanPage() {
   async function editCostItem(
     itemId: string,
     category: string,
+    comment: string | null,
     podId: string | null,
-    cells: { month: string; amount: number; status: PlanStatus }[],
+    cells: { month: string; amount: number }[],
   ) {
     await supabase
       .from('cost_items')
-      .update({ category, pod_id: podId })
+      .update({ category, comment, pod_id: podId })
       .eq('id', itemId)
     await supabase.from('plan_cost_cells').delete().eq('cost_item_id', itemId)
     if (cells.length > 0) {
       await supabase
         .from('plan_cost_cells')
-        .insert(cells.map(c => ({ cost_item_id: itemId, month: c.month, amount: c.amount, status: c.status })))
+        .insert(cells.map(c => ({ cost_item_id: itemId, month: c.month, amount: c.amount, status: 'F' })))
     }
     await load()
   }
@@ -240,6 +255,14 @@ export default function PlanPage() {
     updateAllocStatus(itemId, month, status)
     await supabase.from('plan_allocation_statuses').upsert(
       { revenue_item_id: itemId, month, status },
+      { onConflict: 'revenue_item_id,month' }
+    )
+  }
+
+  async function saveAllocCellAmount(itemId: string, month: string, _currentStatus: PlanStatus, amount: number) {
+    updateAllocAmount(itemId, month, amount)
+    await supabase.from('revenue_allocations').upsert(
+      { revenue_item_id: itemId, month, amount },
       { onConflict: 'revenue_item_id,month' }
     )
   }
@@ -365,6 +388,8 @@ export default function PlanPage() {
                     saveManualCellStatus(itemId, month, amount, status)}
                   onSaveAllocStatus={(itemId, month, status) =>
                     saveAllocStatus(itemId, month, status)}
+                  onSaveAllocAmount={(itemId, month, status, amount) =>
+                    saveAllocCellAmount(itemId, month, status, amount)}
                   onSaveCostAmount={(itemId, month, status, amount) =>
                     saveCostCellAmount(itemId, month, status, amount)}
                   onSaveCostStatus={(itemId, month, amount, status) =>
@@ -374,10 +399,11 @@ export default function PlanPage() {
                   onEditRevenue={(rowId, client, project, podId, cells) =>
                     editManualItem(rowId, client, project, podId, cells)}
                   onDeleteRevenue={rowId => deleteManualItem(rowId)}
-                  onAddCost={(category, podId, cells) =>
-                    addCostItem(podId, category, cells)}
-                  onEditCost={(rowId, category, podId, cells) =>
-                    editCostItem(rowId, category, podId, cells)}
+                  onEditSyncedRevenue={rowId => setEditingSyncedId(rowId)}
+                  onAddCost={(category, comment, podId, cells) =>
+                    addCostItem(podId, category, comment, cells)}
+                  onEditCost={(rowId, category, comment, podId, cells) =>
+                    editCostItem(rowId, category, comment, podId, cells)}
                   onDeleteCost={rowId => deleteCostItem(rowId)}
                 />
               )
@@ -394,6 +420,50 @@ export default function PlanPage() {
           </div>
         </div>
       </div>
+
+      {/* Synced item edit modal */}
+      {editingSyncedId && (() => {
+        const item = state.revenueItems.find(i => i.id === editingSyncedId)
+        if (!item) return null
+        const allocRows = state.allocations
+          .filter(a => a.revenue_item_id === editingSyncedId)
+          .map(a => ({ month: a.month.slice(0, 7), amount: String(Math.round(a.amount / 1000)) }))
+          .sort((a, b) => a.month.localeCompare(b.month))
+        return (
+          <ItemModal
+            mode="synced"
+            displayName={item.client_name ?? '—'}
+            subtitle={[
+              item.rep_name,
+              item.amount != null ? `${Math.round(item.amount / 1000)} kSEK` : null,
+              item.type === 'booking' ? 'Booked' : 'FC',
+              item.event_date ? new Date(item.event_date).toLocaleDateString('sv-SE') : null,
+            ].filter(Boolean).join(' · ')}
+            pods={state.pods}
+            initialPodId={item.pod_id ?? null}
+            initialRows={allocRows}
+            referenceKSEK={item.amount != null ? Math.round(item.amount / 1000) : undefined}
+            initialNotes={item.notes ?? ''}
+            onClose={() => setEditingSyncedId(null)}
+            onSave={async ({ podId, rows, notes }) => {
+              await supabase.from('revenue_allocations').delete().eq('revenue_item_id', editingSyncedId)
+              if (rows.length > 0) {
+                await supabase.from('revenue_allocations').insert(
+                  rows.map(r => ({ revenue_item_id: editingSyncedId, month: r.month, amount: r.amount }))
+                )
+              }
+              const updates: Record<string, unknown> = {}
+              if (notes !== (item.notes ?? '')) updates.notes = notes || null
+              if (podId !== (item.pod_id ?? null)) updates.pod_id = podId
+              if (Object.keys(updates).length > 0) {
+                await supabase.from('revenue_items').update(updates).eq('id', editingSyncedId)
+              }
+              setEditingSyncedId(null)
+              await load()
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }
