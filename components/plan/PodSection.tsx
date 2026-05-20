@@ -5,6 +5,7 @@ import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
 import { sumCells, sumAllMonths, computeCB1 } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
 import { CostItemModal } from './CostItemModal'
+import { ClientBadge } from './ClientBadge'
 import { ItemModal } from '@/components/ItemModal'
 import type { ItemModalSaveData } from '@/components/ItemModal'
 
@@ -12,16 +13,40 @@ function colStyle(n: number) {
   return { gridTemplateColumns: `200px repeat(${n}, 76px) 80px` }
 }
 
-function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: number }) {
+function currentMonthStr() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
   return (
-    <div className="grid border-t border-[#EBEBEB] bg-[#F9F9F8]" style={colStyle(values.length)}>
-      <div className="px-2 py-2 text-xs font-semibold text-[#0F0F0F] truncate">{label}</div>
+    <svg
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      className={`w-3 h-3 transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'}`}
+    >
+      <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z" clipRule="evenodd" />
+    </svg>
+  )
+}
+
+function TotalRow({ label, values, fy, accent }: {
+  label: string
+  values: number[]
+  fy: number
+  accent?: boolean
+}) {
+  const textColor = accent ? 'text-[#0F0F0F]' : 'text-[#374151]'
+  const bg = accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'
+  return (
+    <div className={`grid ${bg}`} style={colStyle(values.length)}>
+      <div className={`px-3 py-2 text-xs font-semibold ${textColor} truncate`}>{label}</div>
       {values.map((v, i) => (
-        <div key={i} className="px-1 py-2 text-right text-xs font-semibold text-[#0F0F0F]">
+        <div key={i} className={`px-1 py-2 text-right text-xs font-semibold ${textColor}`}>
           {v === 0 ? <span className="text-[#D1D5DB]">—</span> : Math.round(v / 1000).toLocaleString('sv-SE')}
         </div>
       ))}
-      <div className="px-1 py-2 text-right text-xs font-semibold text-[#0F0F0F]">
+      <div className={`px-1 py-2 text-right text-xs font-semibold ${textColor}`}>
         {fy === 0 ? <span className="text-[#D1D5DB]">—</span> : Math.round(fy / 1000).toLocaleString('sv-SE')}
       </div>
     </div>
@@ -56,10 +81,15 @@ export function PodSection({
   onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
 }) {
+  const [revenueOpen, setRevenueOpen] = useState(true)
+  const [costsOpen, setCostsOpen]     = useState(true)
+
   const [addingRevenue, setAddingRevenue]         = useState(false)
   const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
   const [addingCost, setAddingCost]               = useState(false)
   const [editingCostRow, setEditingCostRow]       = useState<CostRow | null>(null)
+
+  const curMonth = currentMonthStr()
 
   const revTotals  = months.map(m => sumCells(revenueRows, m))
   const revFY      = sumAllMonths(revenueRows, months)
@@ -75,13 +105,9 @@ export function PodSection({
 
   function handleRevenueModalSave(row: RevenueRow | null, data: ItemModalSaveData) {
     const cells = (data.rows ?? []).map(r => ({
-      month: r.month,
-      amount: r.amount,
-      status: 'F' as PlanStatus,
+      month: r.month, amount: r.amount, status: 'F' as PlanStatus,
     }))
-    if (row) {
-      return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, cells)
-    }
+    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, cells)
     return onAddRevenue(data.clientName!, data.project ?? null, data.podId, cells)
   }
 
@@ -89,145 +115,195 @@ export function PodSection({
 
   return (
     <>
-      <div className="mb-6 bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
+      <div className="mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
 
-        {/* Pod header */}
-        <div className="px-3 py-2 bg-[#F9F9F8] border-b border-[#EBEBEB]">
-          <span className="text-xs font-bold text-[#0F0F0F] uppercase tracking-wider">{pod.name}</span>
-          <span className="text-[10px] text-[#9CA3AF] ml-2">Revenue</span>
+        {/* ── Pod header ─────────────────────────────────────────────────────── */}
+        <div className="px-4 py-3 bg-gradient-to-r from-[#0F0F0F] to-[#1F2937] flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-[#61b5cc]" />
+          <span className="text-sm font-bold text-white tracking-wide">{pod.name}</span>
         </div>
 
-        {/* Revenue rows */}
-        {revenueRows.map(row => (
-          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
-            <div
-              className="px-2 py-1 flex flex-col justify-center min-w-0 cursor-pointer hover:text-[#61b5cc] transition-colors"
-              onClick={() => row.kind === 'manual' ? setEditingRevenueRow(row) : onEditSyncedRevenue(row.id)}
-            >
-              <span className="text-xs text-[#0F0F0F] font-medium truncate" title={row.client_name ?? ''}>
-                {row.client_name ?? '—'}
-              </span>
-              {row.project && (
-                <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>
-              )}
+        {/* ── Revenue section header ─────────────────────────────────────────── */}
+        <button
+          onClick={() => setRevenueOpen(o => !o)}
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+        >
+          <ChevronIcon open={revenueOpen} />
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+          {!revenueOpen && revFY > 0 && (
+            <span className="ml-auto text-xs font-semibold text-[#0F0F0F]">
+              {Math.round(revFY / 1000).toLocaleString('sv-SE')} kSEK
+            </span>
+          )}
+        </button>
+
+        {/* ── Revenue rows ───────────────────────────────────────────────────── */}
+        {revenueOpen && (
+          <>
+            {revenueRows.map((row, rowIdx) => (
+              <div
+                key={row.id}
+                className={`grid border-b border-[#F3F4F6] transition-colors ${rowIdx % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#F0F9FF]`}
+                style={CS}
+              >
+                {/* Row label */}
+                <div
+                  className="px-3 py-1.5 flex flex-col justify-center min-w-0 cursor-pointer group"
+                  onClick={() => row.kind === 'manual' ? setEditingRevenueRow(row) : onEditSyncedRevenue(row.id)}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs text-[#111827] font-medium truncate group-hover:text-[#2563EB] transition-colors" title={row.client_name ?? ''}>
+                      {row.client_name ?? '—'}
+                    </span>
+                    <ClientBadge row={row} />
+                  </div>
+                  {row.project && (
+                    <span className="text-[10px] text-[#9CA3AF] truncate mt-0.5">{row.project}</span>
+                  )}
+                </div>
+
+                {/* Cells */}
+                {months.map(m => {
+                  const cell = row.cells[m]
+                  const isAging = m < curMonth && cell.status !== 'A' && cell.amount > 0
+                  if (row.kind === 'manual') {
+                    return (
+                      <EditableCell
+                        key={m}
+                        amount={cell.amount}
+                        status={cell.status}
+                        isAging={isAging}
+                        onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
+                        onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
+                      />
+                    )
+                  }
+                  return (
+                    <EditableCell
+                      key={m}
+                      amount={cell.amount}
+                      status={cell.status}
+                      isAging={isAging}
+                      onSaveAmount={v => onSaveAllocAmount(row.id, m, cell.status, v)}
+                      onSaveStatus={s => onSaveAllocStatus(row.id, m, s)}
+                    />
+                  )
+                })}
+
+                {/* FY total */}
+                <div className="px-1 py-1.5 flex items-center justify-end text-xs font-semibold text-[#111827]">
+                  {sumAllMonths([row], months) === 0
+                    ? <span className="text-[#D1D5DB]">—</span>
+                    : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
+                </div>
+              </div>
+            ))}
+
+            {/* Add revenue button */}
+            <div className="border-b border-[#F3F4F6]">
+              <button
+                onClick={() => setAddingRevenue(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs text-[#9CA3AF] hover:text-[#2563EB] hover:bg-[#EFF6FF] w-full transition-colors"
+              >
+                <span className="text-sm font-light leading-none">+</span>
+                Add revenue item
+              </button>
             </div>
-            {months.map(m => {
-              const cell = row.cells[m]
-              if (row.kind === 'manual') {
-                return (
-                  <EditableCell
-                    key={m}
-                    amount={cell.amount}
-                    status={cell.status}
-                    onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
-                    onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
-                  />
-                )
-              }
-              return (
-                <EditableCell
-                  key={m}
-                  amount={cell.amount}
-                  status={cell.status}
-                  onSaveAmount={v => onSaveAllocAmount(row.id, m, cell.status, v)}
-                  onSaveStatus={s => onSaveAllocStatus(row.id, m, s)}
-                />
-              )
-            })}
-            <div className="px-1 py-1 flex items-center justify-end text-xs font-semibold text-[#0F0F0F]">
-              {sumAllMonths([row], months) === 0
-                ? <span className="text-[#D1D5DB]">—</span>
-                : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
+
+            {/* Revenue total */}
+            <TotalRow label={`Total revenue`} values={revTotals} fy={revFY} accent />
+          </>
+        )}
+
+        {/* ── Costs section header ───────────────────────────────────────────── */}
+        <button
+          onClick={() => setCostsOpen(o => !o)}
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+        >
+          <ChevronIcon open={costsOpen} />
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+          {!costsOpen && costFY > 0 && (
+            <span className="ml-auto text-xs font-semibold text-[#6B7280]">
+              {Math.round(costFY / 1000).toLocaleString('sv-SE')} kSEK
+            </span>
+          )}
+        </button>
+
+        {/* ── Cost rows ──────────────────────────────────────────────────────── */}
+        {costsOpen && (
+          <>
+            {costRows.map((row, rowIdx) => (
+              <div
+                key={row.id}
+                className={`grid border-b border-[#F3F4F6] transition-colors ${rowIdx % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'} hover:bg-[#FFF7ED]`}
+                style={CS}
+              >
+                <div
+                  className="px-3 py-1.5 flex flex-col justify-center min-w-0 cursor-pointer group"
+                  onClick={() => setEditingCostRow(row)}
+                >
+                  <span className="text-xs text-[#374151] truncate group-hover:text-[#EA580C] transition-colors">{row.category}</span>
+                  {row.comment && (
+                    <span className="text-[10px] text-[#9CA3AF] truncate mt-0.5">{row.comment}</span>
+                  )}
+                </div>
+                {months.map(m => {
+                  const cell = row.cells[m]
+                  const isAging = m < curMonth && cell.status !== 'A' && cell.amount > 0
+                  return (
+                    <EditableCell
+                      key={m}
+                      amount={cell.amount}
+                      status={cell.status}
+                      isAging={isAging}
+                      onSaveAmount={v => onSaveCostAmount(row.id, m, cell.status, v)}
+                      onSaveStatus={s => onSaveCostStatus(row.id, m, cell.amount, s)}
+                    />
+                  )
+                })}
+                <div className="px-1 py-1.5 flex items-center justify-end text-xs font-semibold text-[#374151]">
+                  {sumAllMonths([row], months) === 0
+                    ? <span className="text-[#D1D5DB]">—</span>
+                    : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
+                </div>
+              </div>
+            ))}
+
+            {/* Add cost button */}
+            <div className="border-b border-[#F3F4F6]">
+              <button
+                onClick={() => setAddingCost(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs text-[#9CA3AF] hover:text-[#EA580C] hover:bg-[#FFF7ED] w-full transition-colors"
+              >
+                <span className="text-sm font-light leading-none">+</span>
+                Add cost item
+              </button>
             </div>
-          </div>
-        ))}
 
-        {/* Add revenue button */}
-        <div className="border-b border-[#F3F4F6]">
-          <button
-            onClick={() => setAddingRevenue(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#9CA3AF] hover:text-[#61b5cc] transition-colors"
-          >
-            <span className="text-base leading-none">+</span>
-            Add revenue item
-          </button>
-        </div>
+            {/* Cost total */}
+            <TotalRow label="Total costs" values={costTotals} fy={costFY} />
+          </>
+        )}
 
-        {/* Revenue total */}
-        <TotalRow label={`Total revenue ${pod.name}`} values={revTotals} fy={revFY} />
-
-        {/* Cost header */}
-        <div className="px-3 py-2 bg-[#F9F9F8] border-t border-[#EBEBEB]">
-          <span className="text-[10px] text-[#9CA3AF] font-semibold uppercase tracking-wider">Costs</span>
-        </div>
-
-        {/* Cost rows */}
-        {costRows.map(row => (
-          <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={CS}>
-            <div
-              className="px-2 py-1 flex flex-col justify-center min-w-0 cursor-pointer hover:text-[#61b5cc] transition-colors"
-              onClick={() => setEditingCostRow(row)}
-            >
-              <span className="text-xs text-[#6B7280] truncate">{row.category}</span>
-              {row.comment && (
-                <span className="text-[10px] text-[#9CA3AF] truncate">{row.comment}</span>
-              )}
-            </div>
-            {months.map(m => {
-              const cell = row.cells[m]
-              return (
-                <EditableCell
-                  key={m}
-                  amount={cell.amount}
-                  status={cell.status}
-                  onSaveAmount={v => onSaveCostAmount(row.id, m, cell.status, v)}
-                  onSaveStatus={s => onSaveCostStatus(row.id, m, cell.amount, s)}
-                />
-              )
-            })}
-            <div className="px-1 py-1 flex items-center justify-end text-xs font-semibold text-[#6B7280]">
-              {sumAllMonths([row], months) === 0
-                ? <span className="text-[#D1D5DB]">—</span>
-                : Math.round(sumAllMonths([row], months) / 1000).toLocaleString('sv-SE')}
-            </div>
-          </div>
-        ))}
-
-        {/* Add cost button */}
-        <div className="border-b border-[#F3F4F6]">
-          <button
-            onClick={() => setAddingCost(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#9CA3AF] hover:text-[#61b5cc] transition-colors"
-          >
-            <span className="text-base leading-none">+</span>
-            Add cost item
-          </button>
-        </div>
-
-        {/* Cost total */}
-        <TotalRow label={`Total costs ${pod.name}`} values={costTotals} fy={costFY} />
-
-        {/* CB1% */}
-        <div className="grid border-t border-[#EBEBEB]" style={CS}>
-          <div className="px-2 py-2 text-xs font-semibold text-[#9CA3AF]">CB1%</div>
+        {/* ── CB1% row ───────────────────────────────────────────────────────── */}
+        <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
+          <div className="px-3 py-2 text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</div>
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
             return (
-              <div key={m} className={`px-1 py-2 text-right text-xs font-semibold ${
+              <div key={m} className={`px-1 py-2 text-right text-xs font-bold ${
                 cb === null ? 'text-[#D1D5DB]' :
                 cb >= 20   ? 'text-[#16A34A]' :
-                cb >= 0    ? 'text-[#B45309]' : 'text-[#EF4444]'
+                cb >= 0    ? 'text-[#D97706]' : 'text-[#DC2626]'
               }`}>
                 {cb === null ? '—' : `${Math.round(cb)}%`}
               </div>
             )
           })}
-          <div className={`px-1 py-2 text-right text-xs font-semibold ${
-            (() => {
-              const cb = computeCB1(revFY, costFY)
-              return cb === null ? 'text-[#D1D5DB]' : cb >= 20 ? 'text-[#16A34A]' : cb >= 0 ? 'text-[#B45309]' : 'text-[#EF4444]'
-            })()
-          }`}>
+          <div className={`px-1 py-2 text-right text-xs font-bold ${(() => {
+            const cb = computeCB1(revFY, costFY)
+            return cb === null ? 'text-[#D1D5DB]' : cb >= 20 ? 'text-[#16A34A]' : cb >= 0 ? 'text-[#D97706]' : 'text-[#DC2626]'
+          })()}`}>
             {(() => {
               const cb = computeCB1(revFY, costFY)
               return cb === null ? '—' : `${Math.round(cb)}%`
@@ -236,7 +312,7 @@ export function PodSection({
         </div>
       </div>
 
-      {/* Add revenue modal */}
+      {/* ── Modals ─────────────────────────────────────────────────────────────── */}
       {addingRevenue && (
         <ItemModal
           mode="manual"
@@ -251,7 +327,6 @@ export function PodSection({
         />
       )}
 
-      {/* Edit manual revenue modal */}
       {editingRevenueRow && (
         <ItemModal
           mode="manual"
@@ -272,7 +347,6 @@ export function PodSection({
         />
       )}
 
-      {/* Add cost modal */}
       {addingCost && (
         <CostItemModal
           mode="add"
@@ -286,7 +360,6 @@ export function PodSection({
         />
       )}
 
-      {/* Edit cost modal */}
       {editingCostRow && (
         <CostItemModal
           mode="edit"

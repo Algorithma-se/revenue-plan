@@ -14,6 +14,7 @@ import type {
 } from '@/types/database'
 import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
+import { AISummary } from '@/components/plan/AISummary'
 import { ItemModal } from '@/components/ItemModal'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
@@ -350,6 +351,14 @@ export default function PlanPage() {
             </button>
           </div>
         </div>
+
+        {/* AI Summary */}
+        <AISummary
+          allRevenueRows={allRevenueRows}
+          allCostRows={allCostRows}
+          targets={state.targets}
+          months={months}
+        />
 
         {/* Grid */}
         <div className="overflow-x-auto">

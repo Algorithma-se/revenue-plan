@@ -5,15 +5,13 @@ import type { PlanStatus } from '@/types/database'
 import { StatusBadge } from './StatusBadge'
 
 export function EditableCell({
-  amount,
-  status,
-  readonly,
-  onSaveAmount,
-  onSaveStatus,
+  amount, status, readonly, isAging,
+  onSaveAmount, onSaveStatus,
 }: {
   amount: number
   status: PlanStatus
   readonly?: boolean
+  isAging?: boolean
   onSaveAmount?: (v: number) => Promise<void>
   onSaveStatus?: (s: PlanStatus) => Promise<void>
 }) {
@@ -26,7 +24,7 @@ export function EditableCell({
   }, [editing])
 
   function startEdit() {
-    if (readonly) return
+    if (readonly || editing) return
     setDraft(amount === 0 ? '' : String(Math.round(amount / 1000)))
     setEditing(true)
   }
@@ -39,9 +37,11 @@ export function EditableCell({
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
 
-  return (
-    <div className="flex flex-col items-end gap-0.5 px-1 py-1 min-h-[36px] justify-center">
-      {editing ? (
+  const agingBg = isAging && amount > 0 && !editing ? 'bg-[#FFFBEB]' : ''
+
+  if (editing) {
+    return (
+      <div className="flex items-center px-1 py-1 min-h-[36px]">
         <input
           ref={inputRef}
           type="number"
@@ -54,17 +54,21 @@ export function EditableCell({
           }}
           className="w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
         />
-      ) : (
-        <div
-          onClick={startEdit}
-          className={`text-right text-xs w-full leading-none
-            ${amount === 0 ? 'text-[#D1D5DB]' : 'text-[#0F0F0F] font-medium'}
-            ${readonly ? '' : 'cursor-text hover:bg-[#F9F9F8] rounded transition-colors'}`}
-        >
-          {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
-        </div>
-      )}
+      </div>
+    )
+  }
+
+  return (
+    <div className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] ${agingBg} transition-colors`}>
       <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} />
+      <div
+        onClick={startEdit}
+        className={`text-right text-xs leading-none min-w-[36px]
+          ${amount === 0 ? 'text-[#D1D5DB]' : isAging ? 'text-[#B45309] font-medium' : 'text-[#0F0F0F] font-medium'}
+          ${readonly ? '' : 'cursor-text hover:bg-[#F3F4F6] rounded px-0.5 transition-colors'}`}
+      >
+        {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
+      </div>
     </div>
   )
 }
