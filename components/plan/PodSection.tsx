@@ -129,7 +129,7 @@ export function PodSection({
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
-        {revenueOpen ? (
+        {revenueOpen && (
           <>
             {revenueRows.map((row, rowIdx) => (
               <div
@@ -192,9 +192,6 @@ export function PodSection({
             {/* Revenue total (A+B only) */}
             <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
           </>
-        ) : (
-          /* Collapsed: just show the totals row */
-          <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
         )}
 
         {/* ── Costs section header ───────────────────────────────────────────── */}
@@ -207,7 +204,7 @@ export function PodSection({
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
-        {costsOpen ? (
+        {costsOpen && (
           <>
             {costRows.map((row, rowIdx) => (
               <div
@@ -260,9 +257,6 @@ export function PodSection({
             {/* Cost total */}
             <TotalRow label="Total costs" values={costTotals} fy={costFY} />
           </>
-        ) : (
-          /* Collapsed: just show the totals row */
-          <TotalRow label="Total costs" values={costTotals} fy={costFY} />
         )}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
