@@ -15,6 +15,7 @@ interface UserInfo {
 const NAV_LINKS = [
   { href: '/',      label: 'Work List' },
   { href: '/plan',  label: 'P&L Plan'  },
+  { href: '/faq',   label: 'FAQ'       },
 ]
 
 export default function Header() {
