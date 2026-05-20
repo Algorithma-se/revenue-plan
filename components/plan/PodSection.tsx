@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
-import { sumCells, sumAllMonths, computeCB1 } from '@/lib/plan-utils'
+import { sumCells, sumAllMonths, sumByStatus, computeCB1 } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
 import { CostItemModal } from './CostItemModal'
 import { ClientBadge } from './ClientBadge'
@@ -56,10 +56,8 @@ function TotalRow({ label, values, fy, accent }: {
 export function PodSection({
   pod, revenueRows, costRows, pods, months,
   onSaveManualAmount, onSaveManualStatus,
-  onSaveAllocStatus, onSaveAllocAmount,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
-  onEditSyncedRevenue,
   onAddCost, onEditCost, onDeleteCost,
 }: {
   pod: Pod
@@ -69,14 +67,11 @@ export function PodSection({
   months: readonly string[]
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onSaveAllocStatus:   (itemId: string, month: string, status: PlanStatus) => Promise<void>
-  onSaveAllocAmount:   (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostStatus:    (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onAddRevenue:        (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
   onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
   onDeleteRevenue:     (rowId: string) => Promise<void>
-  onEditSyncedRevenue: (rowId: string) => void
   onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
@@ -91,8 +86,9 @@ export function PodSection({
 
   const curMonth = currentMonthStr()
 
-  const revTotals  = months.map(m => sumCells(revenueRows, m))
-  const revFY      = sumAllMonths(revenueRows, months)
+  // A+B only for totals and CB1%
+  const revTotals  = months.map(m => sumByStatus(revenueRows, m, ['A', 'B']))
+  const revFY      = revTotals.reduce((s, v) => s + v, 0)
   const costTotals = months.map(m => sumCells(costRows, m))
   const costFY     = sumAllMonths(costRows, months)
 
@@ -130,15 +126,10 @@ export function PodSection({
         >
           <ChevronIcon open={revenueOpen} />
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
-          {!revenueOpen && revFY > 0 && (
-            <span className="ml-auto text-xs font-semibold text-[#0F0F0F]">
-              {Math.round(revFY / 1000).toLocaleString('sv-SE')} kSEK
-            </span>
-          )}
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
-        {revenueOpen && (
+        {revenueOpen ? (
           <>
             {revenueRows.map((row, rowIdx) => (
               <div
@@ -149,7 +140,7 @@ export function PodSection({
                 {/* Row label */}
                 <div
                   className="px-3 py-1.5 flex flex-col justify-center min-w-0 cursor-pointer group"
-                  onClick={() => row.kind === 'manual' ? setEditingRevenueRow(row) : onEditSyncedRevenue(row.id)}
+                  onClick={() => setEditingRevenueRow(row)}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-xs text-[#111827] font-medium truncate group-hover:text-[#2563EB] transition-colors" title={row.client_name ?? ''}>
@@ -166,31 +157,19 @@ export function PodSection({
                 {months.map(m => {
                   const cell = row.cells[m]
                   const isAging = m < curMonth && cell.status !== 'A' && cell.amount > 0
-                  if (row.kind === 'manual') {
-                    return (
-                      <EditableCell
-                        key={m}
-                        amount={cell.amount}
-                        status={cell.status}
-                        isAging={isAging}
-                        onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
-                        onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
-                      />
-                    )
-                  }
                   return (
                     <EditableCell
                       key={m}
                       amount={cell.amount}
                       status={cell.status}
                       isAging={isAging}
-                      onSaveAmount={v => onSaveAllocAmount(row.id, m, cell.status, v)}
-                      onSaveStatus={s => onSaveAllocStatus(row.id, m, s)}
+                      onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
+                      onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
                     />
                   )
                 })}
 
-                {/* FY total */}
+                {/* FY total (all statuses for individual row) */}
                 <div className="px-1 py-1.5 flex items-center justify-end text-xs font-semibold text-[#111827]">
                   {sumAllMonths([row], months) === 0
                     ? <span className="text-[#D1D5DB]">—</span>
@@ -210,9 +189,12 @@ export function PodSection({
               </button>
             </div>
 
-            {/* Revenue total */}
-            <TotalRow label={`Total revenue`} values={revTotals} fy={revFY} accent />
+            {/* Revenue total (A+B only) */}
+            <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
           </>
+        ) : (
+          /* Collapsed: just show the totals row */
+          <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
         )}
 
         {/* ── Costs section header ───────────────────────────────────────────── */}
@@ -222,15 +204,10 @@ export function PodSection({
         >
           <ChevronIcon open={costsOpen} />
           <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
-          {!costsOpen && costFY > 0 && (
-            <span className="ml-auto text-xs font-semibold text-[#6B7280]">
-              {Math.round(costFY / 1000).toLocaleString('sv-SE')} kSEK
-            </span>
-          )}
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
-        {costsOpen && (
+        {costsOpen ? (
           <>
             {costRows.map((row, rowIdx) => (
               <div
@@ -283,6 +260,9 @@ export function PodSection({
             {/* Cost total */}
             <TotalRow label="Total costs" values={costTotals} fy={costFY} />
           </>
+        ) : (
+          /* Collapsed: just show the totals row */
+          <TotalRow label="Total costs" values={costTotals} fy={costFY} />
         )}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}

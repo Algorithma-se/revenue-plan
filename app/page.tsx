@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { RevenueItem, RevenueAllocation, Pod } from '@/types/database'
 import { ItemModal } from '@/components/ItemModal'
+import { monthLabel } from '@/lib/plan-utils'
 
 interface ItemWithAllocations extends RevenueItem {
   allocations: RevenueAllocation[]
@@ -19,6 +20,7 @@ export default function WorkListPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'forecast' | 'booking'>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [processedOpen, setProcessedOpen] = useState(false)
 
   async function removeItem(id: string, e: React.MouseEvent) {
     e.stopPropagation()
@@ -30,6 +32,11 @@ export default function WorkListPage() {
       body: JSON.stringify({ item_id: id }),
     })
     setDeletingId(null)
+    loadData()
+  }
+
+  async function bringBack(id: string) {
+    await supabase.from('revenue_items').update({ status: 'active' }).eq('id', id)
     loadData()
   }
 
@@ -56,12 +63,16 @@ export default function WorkListPage() {
 
   useEffect(() => { loadData() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered    = filterType === 'all' ? items : items.filter(i => i.type === filterType)
-  const selectedItem = items.find(i => i.id === selectedId)
+  // Split by status (default 'active' for rows without the column yet)
+  const activeItems    = items.filter(i => (i.status ?? 'active') === 'active')
+  const processedItems = items.filter(i => i.status === 'processed')
 
-  const fcTotal        = items.filter(i => i.type === 'forecast').reduce((s, i) => s + (i.amount ?? 0), 0)
-  const bookedTotal    = items.filter(i => i.type === 'booking').reduce((s, i) => s + (i.amount ?? 0), 0)
-  const allocatedTotal = items.filter(i => i.allocatedTotal > 0).reduce((s, i) => s + i.allocatedTotal, 0)
+  const filtered       = filterType === 'all' ? activeItems : activeItems.filter(i => i.type === filterType)
+  const selectedItem   = items.find(i => i.id === selectedId)
+
+  const fcTotal        = activeItems.filter(i => i.type === 'forecast').reduce((s, i) => s + (i.amount ?? 0), 0)
+  const bookedTotal    = activeItems.filter(i => i.type === 'booking').reduce((s, i) => s + (i.amount ?? 0), 0)
+  const allocatedTotal = activeItems.filter(i => i.allocatedTotal > 0).reduce((s, i) => s + i.allocatedTotal, 0)
 
   const fmtKSEK = (v: number) => Math.round(v / 1000).toLocaleString('sv-SE')
 
@@ -89,6 +100,56 @@ export default function WorkListPage() {
       return months.map(month => ({ month, amount: perMonthKSEK }))
     }
     return []
+  }
+
+  // Push item to Revenue Plan: creates/updates a manual_revenue_item and marks as processed
+  async function pushToPlan(item: ItemWithAllocations, data: {
+    podId: string | null
+    rows: { month: string; amount: number }[]
+    notes: string
+  }) {
+    let manualItemId = item.plan_manual_item_id
+
+    if (!manualItemId) {
+      const { data: newItem, error } = await supabase
+        .from('manual_revenue_items')
+        .insert({
+          pod_id: data.podId,
+          client_name: item.client_name,
+          project: null,
+          sort: Math.floor(Date.now() / 1000),
+        })
+        .select()
+        .single()
+      if (error || !newItem) throw new Error(error?.message ?? 'Failed to create plan item')
+      manualItemId = newItem.id
+    } else {
+      await supabase
+        .from('manual_revenue_items')
+        .update({ pod_id: data.podId, client_name: item.client_name })
+        .eq('id', manualItemId)
+    }
+
+    // Replace cells
+    await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', manualItemId)
+    if (data.rows.length > 0) {
+      await supabase.from('plan_revenue_cells').insert(
+        data.rows.map(r => ({
+          manual_revenue_item_id: manualItemId,
+          month: r.month,
+          amount: r.amount,
+          status: 'F',
+        }))
+      )
+    }
+
+    // Mark revenue_item as processed and link to plan row
+    await supabase.from('revenue_items').update({
+      status: 'processed',
+      plan_manual_item_id: manualItemId,
+      notes: data.notes || null,
+      pod_id: data.podId,
+    }).eq('id', item.id)
   }
 
   return (
@@ -185,7 +246,7 @@ export default function WorkListPage() {
         })}
       </div>
 
-      {/* Desktop table */}
+      {/* Desktop table — active items */}
       <div className="hidden sm:block bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
         <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
           <table className="w-full text-sm">
@@ -278,6 +339,67 @@ export default function WorkListPage() {
         </div>
       </div>
 
+      {/* Processed section */}
+      {!loading && processedItems.length > 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => setProcessedOpen(o => !o)}
+            className="flex items-center gap-2 mb-3 group"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className={`w-3.5 h-3.5 text-[#9CA3AF] transition-transform duration-200 ${processedOpen ? 'rotate-0' : '-rotate-90'}`}
+            >
+              <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z" clipRule="evenodd" />
+            </svg>
+            <h2 className="text-sm font-semibold text-[#6B7280] group-hover:text-[#374151] transition-colors">
+              Processed
+            </h2>
+            <span className="text-xs text-white bg-[#9CA3AF] px-1.5 py-0.5 rounded-full font-medium">
+              {processedItems.length}
+            </span>
+          </button>
+
+          {processedOpen && (
+            <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
+              {processedItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between px-5 py-3 transition-colors hover:bg-[#F9F9F8] ${idx < processedItems.length - 1 ? 'border-b border-[#F3F4F6]' : ''}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                      item.type === 'booking' ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#EFF6FF] text-[#3B82F6]'
+                    }`}>
+                      {item.type === 'booking' ? 'Booked' : 'FC'}
+                    </span>
+                    <span className="text-sm font-medium text-[#374151] truncate">{item.client_name ?? '—'}</span>
+                    {item.amount != null && (
+                      <span className="text-xs text-[#9CA3AF] whitespace-nowrap">{fmtKSEK(item.amount)} kSEK</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                    <span className="text-[11px] text-[#9CA3AF] flex items-center gap-1">
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                        <path fillRule="evenodd" d="M1 8a.5.5 0 01.5-.5h11.793l-3.147-3.146a.5.5 0 01.708-.708l4 4a.5.5 0 010 .708l-4 4a.5.5 0 01-.708-.708L13.293 8.5H1.5A.5.5 0 011 8z" clipRule="evenodd" />
+                      </svg>
+                      P&L
+                    </span>
+                    <button
+                      onClick={() => bringBack(item.id)}
+                      className="text-xs px-3 py-1.5 rounded-lg font-medium text-[#6B7280] bg-[#F3F4F6] hover:bg-[#E5E7EB] hover:text-[#374151] transition-colors"
+                    >
+                      Bring back
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Item modal */}
       {selectedItem && (
         <ItemModal
@@ -296,20 +418,41 @@ export default function WorkListPage() {
           initialNotes={selectedItem.notes ?? ''}
           onClose={() => setSelectedId(null)}
           onSave={async ({ podId, rows, notes }) => {
-            // Delete existing allocations and re-insert (amounts already in SEK from ItemModal)
-            await supabase.from('revenue_allocations').delete().eq('revenue_item_id', selectedItem.id)
-            if (rows.length > 0) {
-              const { error: insertErr } = await supabase.from('revenue_allocations').insert(
-                rows.map(r => ({ revenue_item_id: selectedItem.id, month: r.month, amount: r.amount }))
-              )
-              if (insertErr) throw insertErr
+            if (rows.length === 0) {
+              // No allocation rows — just update metadata without pushing to plan
+              const updates: Record<string, unknown> = {}
+              if (notes !== (selectedItem.notes ?? '')) updates.notes = notes || null
+              if (podId !== (selectedItem.pod_id ?? null)) updates.pod_id = podId
+              if (Object.keys(updates).length > 0) {
+                await supabase.from('revenue_items').update(updates).eq('id', selectedItem.id)
+              }
+              setSelectedId(null)
+              loadData()
+              return
             }
-            const updates: Record<string, unknown> = {}
-            if (notes !== (selectedItem.notes ?? '')) updates.notes = notes || null
-            if (podId !== (selectedItem.pod_id ?? null)) updates.pod_id = podId
-            if (Object.keys(updates).length > 0) {
-              await supabase.from('revenue_items').update(updates).eq('id', selectedItem.id)
-            }
+
+            // Show confirmation before pushing to Revenue Plan
+            const pod      = pods.find(p => p.id === podId)
+            const total    = rows.reduce((s, r) => s + r.amount, 0)
+            const monthBreakdown = rows
+              .map(r => {
+                const label = monthLabel(r.month)
+                return `${label}: ${Math.round(r.amount / 1000)} kSEK`
+              })
+              .join(', ')
+
+            const confirmed = confirm(
+              `Push to Revenue Plan?\n\n` +
+              `Client: ${selectedItem.client_name ?? '—'}\n` +
+              `Pod: ${pod?.name ?? '—'}\n` +
+              `Total: ${Math.round(total / 1000).toLocaleString('sv-SE')} kSEK\n` +
+              `Months: ${monthBreakdown}\n\n` +
+              `This will create/update the row in the P&L and move the item to Processed.`
+            )
+
+            if (!confirmed) return  // onSave resolves (saving → false), modal stays open
+
+            await pushToPlan(selectedItem, { podId, rows, notes })
             setSelectedId(null)
             loadData()
           }}

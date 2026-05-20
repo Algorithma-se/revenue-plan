@@ -12,6 +12,8 @@ export interface RevenueItem {
   start_month: string | null  // 'YYYY-MM-DD'
   end_month: string | null    // 'YYYY-MM-DD'
   pod_id: string | null
+  status: 'active' | 'processed'
+  plan_manual_item_id: string | null
 }
 
 export interface RevenueAllocation {
@@ -90,7 +92,7 @@ export interface PlanTarget {
 // ─── Derived view types used in /plan ─────────────────────────────────────────
 
 export interface RevenueRow {
-  kind: 'synced' | 'manual'
+  kind: 'manual'
   id: string
   client_name: string | null
   project: string | null

@@ -74,6 +74,7 @@ export function ItemModal({
         notes,
         ...(mode === 'manual' ? { clientName: clientName.trim(), project: project.trim() || null } : {}),
       })
+      setSaving(false)  // reset so modal stays interactive if caller doesn't close it
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save')
       setSaving(false)

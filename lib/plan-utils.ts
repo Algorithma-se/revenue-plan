@@ -1,5 +1,5 @@
 import type {
-  Pod, RevenueItem, RevenueAllocation, PlanAllocationStatus,
+  Pod,
   ManualRevenueItem, PlanRevenueCell, CostItem, PlanCostCell,
   PlanStatus, RevenueRow, CostRow,
 } from '@/types/database'
@@ -44,35 +44,13 @@ export function cycleStatus(s: PlanStatus): PlanStatus {
   return s === 'F' ? 'B' : s === 'B' ? 'A' : 'F'
 }
 
-export function defaultStatus(item: RevenueItem): PlanStatus {
-  return item.type === 'booking' ? 'B' : 'F'
-}
-
 export function buildRevenueRows(
   pod: Pod,
-  revenueItems: RevenueItem[],
-  allocations: RevenueAllocation[],
-  allocStatuses: PlanAllocationStatus[],
   manualItems: ManualRevenueItem[],
   planRevCells: PlanRevenueCell[],
   months: readonly string[] = FISCAL_MONTHS,
 ): RevenueRow[] {
-  const syncedRows: RevenueRow[] = revenueItems
-    .filter(item => item.pod_id === pod.id)
-    .map(item => {
-      const cells: Record<string, { amount: number; status: PlanStatus }> = {}
-      for (const m of months) {
-        const alloc = allocations.find(a => a.revenue_item_id === item.id && a.month === m)
-        const st    = allocStatuses.find(s => s.revenue_item_id === item.id && s.month === m)
-        cells[m] = {
-          amount: alloc?.amount ?? 0,
-          status: (st?.status as PlanStatus) ?? defaultStatus(item),
-        }
-      }
-      return { kind: 'synced' as const, id: item.id, client_name: item.client_name, project: null, pod_id: pod.id, cells }
-    })
-
-  const manualRows: RevenueRow[] = manualItems
+  return manualItems
     .filter(item => item.pod_id === pod.id)
     .sort((a, b) => a.sort - b.sort)
     .map(item => {
@@ -83,8 +61,6 @@ export function buildRevenueRows(
       }
       return { kind: 'manual' as const, id: item.id, client_name: item.client_name, project: item.project ?? null, pod_id: pod.id, cells }
     })
-
-  return [...syncedRows, ...manualRows]
 }
 
 export function buildCostRows(

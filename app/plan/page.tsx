@@ -5,30 +5,26 @@ import { supabase } from '@/lib/supabase'
 import {
   getFiscalMonths, fyLabel, currentFyStart,
   monthLabel, buildRevenueRows, buildCostRows,
-  sumCells, sumAllMonths, fmtKSEK,
+  sumCells, sumAllMonths,
 } from '@/lib/plan-utils'
 import type {
-  Pod, RevenueItem, RevenueAllocation, PlanAllocationStatus,
-  ManualRevenueItem, PlanRevenueCell, CostItem, PlanCostCell,
-  PlanTarget, RevenueRow, CostRow, PlanStatus,
+  Pod, ManualRevenueItem, PlanRevenueCell,
+  CostItem, PlanCostCell, PlanTarget,
+  RevenueRow, CostRow, PlanStatus,
 } from '@/types/database'
 import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
 import { AISummary } from '@/components/plan/AISummary'
-import { ItemModal } from '@/components/ItemModal'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
 interface PlanState {
-  pods:          Pod[]
-  revenueItems:  RevenueItem[]
-  allocations:   RevenueAllocation[]
-  allocStatuses: PlanAllocationStatus[]
-  manualItems:   ManualRevenueItem[]
-  planRevCells:  PlanRevenueCell[]
-  costItems:     CostItem[]
-  costCells:     PlanCostCell[]
-  targets:       PlanTarget[]
+  pods:         Pod[]
+  manualItems:  ManualRevenueItem[]
+  planRevCells: PlanRevenueCell[]
+  costItems:    CostItem[]
+  costCells:    PlanCostCell[]
+  targets:      PlanTarget[]   // used by AISummary only
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -36,17 +32,13 @@ interface PlanState {
 export default function PlanPage() {
   const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [fyStart, setFyStart]           = useState(currentFyStart)
-  const [editingSyncedId, setEditingSyncedId] = useState<string | null>(null)
+  const [fyStart, setFyStart] = useState(currentFyStart)
 
   const months = getFiscalMonths(fyStart)
 
   const load = useCallback(async () => {
     const [
       { data: pods },
-      { data: revenueItems },
-      { data: allocations },
-      { data: allocStatuses },
       { data: manualItems },
       { data: planRevCells },
       { data: costItems },
@@ -54,9 +46,6 @@ export default function PlanPage() {
       { data: targets },
     ] = await Promise.all([
       supabase.from('pods').select('*').order('sort'),
-      supabase.from('revenue_items').select('*'),
-      supabase.from('revenue_allocations').select('*'),
-      supabase.from('plan_allocation_statuses').select('*'),
       supabase.from('manual_revenue_items').select('*').order('sort'),
       supabase.from('plan_revenue_cells').select('*'),
       supabase.from('cost_items').select('*').order('sort'),
@@ -65,15 +54,12 @@ export default function PlanPage() {
     ])
 
     setState({
-      pods:          (pods ?? [])          as Pod[],
-      revenueItems:  (revenueItems ?? [])  as RevenueItem[],
-      allocations:   (allocations ?? [])   as RevenueAllocation[],
-      allocStatuses: (allocStatuses ?? []) as PlanAllocationStatus[],
-      manualItems:   (manualItems ?? [])   as ManualRevenueItem[],
-      planRevCells:  (planRevCells ?? [])  as PlanRevenueCell[],
-      costItems:     (costItems ?? [])     as CostItem[],
-      costCells:     (costCells ?? [])     as PlanCostCell[],
-      targets:       (targets ?? [])       as PlanTarget[],
+      pods:         (pods ?? [])         as Pod[],
+      manualItems:  (manualItems ?? [])  as ManualRevenueItem[],
+      planRevCells: (planRevCells ?? []) as PlanRevenueCell[],
+      costItems:    (costItems ?? [])    as CostItem[],
+      costCells:    (costCells ?? [])    as PlanCostCell[],
+      targets:      (targets ?? [])      as PlanTarget[],
     })
     setLoading(false)
   }, [])
@@ -95,28 +81,6 @@ export default function PlanPage() {
     }) : s)
   }
 
-  function updateAllocStatus(itemId: string, month: string, status: PlanStatus) {
-    setState(s => s ? ({
-      ...s,
-      allocStatuses: s.allocStatuses.some(a => a.revenue_item_id === itemId && a.month === month)
-        ? s.allocStatuses.map(a =>
-            a.revenue_item_id === itemId && a.month === month ? { ...a, status } : a
-          )
-        : [...s.allocStatuses, { id: crypto.randomUUID(), revenue_item_id: itemId, month, status }],
-    }) : s)
-  }
-
-  function updateAllocAmount(itemId: string, month: string, amount: number) {
-    setState(s => s ? ({
-      ...s,
-      allocations: s.allocations.some(a => a.revenue_item_id === itemId && a.month === month)
-        ? s.allocations.map(a =>
-            a.revenue_item_id === itemId && a.month === month ? { ...a, amount } : a
-          )
-        : [...s.allocations, { id: crypto.randomUUID(), revenue_item_id: itemId, month, amount, created_at: new Date().toISOString() }],
-    }) : s)
-  }
-
   function updateCostCell(itemId: string, month: string, amount: number, status: PlanStatus) {
     setState(s => s ? ({
       ...s,
@@ -127,13 +91,6 @@ export default function PlanPage() {
               : c
           )
         : [...s.costCells, { id: crypto.randomUUID(), cost_item_id: itemId, month, amount, status }],
-    }) : s)
-  }
-
-  function updateTarget(month: string, revenueTarget: number) {
-    setState(s => s ? ({
-      ...s,
-      targets: s.targets.map(t => t.month === month ? { ...t, revenue_target: revenueTarget } : t),
     }) : s)
   }
 
@@ -182,7 +139,11 @@ export default function PlanPage() {
   }
 
   async function deleteManualItem(itemId: string) {
-    await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
+    // Reset any linked Work List items back to active before deleting the plan row
+    await supabase.from('revenue_items')
+      .update({ status: 'active', plan_manual_item_id: null })
+      .eq('plan_manual_item_id', itemId)
+    // plan_revenue_cells cascade-deletes via FK
     await supabase.from('manual_revenue_items').delete().eq('id', itemId)
     await load()
   }
@@ -252,22 +213,6 @@ export default function PlanPage() {
     )
   }
 
-  async function saveAllocStatus(itemId: string, month: string, status: PlanStatus) {
-    updateAllocStatus(itemId, month, status)
-    await supabase.from('plan_allocation_statuses').upsert(
-      { revenue_item_id: itemId, month, status },
-      { onConflict: 'revenue_item_id,month' }
-    )
-  }
-
-  async function saveAllocCellAmount(itemId: string, month: string, _currentStatus: PlanStatus, amount: number) {
-    updateAllocAmount(itemId, month, amount)
-    await supabase.from('revenue_allocations').upsert(
-      { revenue_item_id: itemId, month, amount },
-      { onConflict: 'revenue_item_id,month' }
-    )
-  }
-
   async function saveCostCellAmount(itemId: string, month: string, currentStatus: PlanStatus, amount: number) {
     updateCostCell(itemId, month, amount, currentStatus)
     await supabase.from('plan_cost_cells').upsert(
@@ -281,14 +226,6 @@ export default function PlanPage() {
     await supabase.from('plan_cost_cells').upsert(
       { cost_item_id: itemId, month, amount: currentAmount, status },
       { onConflict: 'cost_item_id,month' }
-    )
-  }
-
-  async function saveTarget(month: string, revenueTarget: number) {
-    updateTarget(month, revenueTarget)
-    await supabase.from('plan_targets').upsert(
-      { month, revenue_target: revenueTarget, margin_target: 7 },
-      { onConflict: 'month' }
     )
   }
 
@@ -311,7 +248,7 @@ export default function PlanPage() {
   }
 
   const allRevenueRows: RevenueRow[] = state.pods.flatMap(pod =>
-    buildRevenueRows(pod, state.revenueItems, state.allocations, state.allocStatuses, state.manualItems, state.planRevCells, months)
+    buildRevenueRows(pod, state.manualItems, state.planRevCells, months)
   )
   const allCostRows: CostRow[] = state.pods.flatMap(pod =>
     buildCostRows(pod, state.costItems, state.costCells, months)
@@ -377,10 +314,7 @@ export default function PlanPage() {
 
             {/* Pod sections */}
             {state.pods.map(pod => {
-              const revenueRows = buildRevenueRows(
-                pod, state.revenueItems, state.allocations, state.allocStatuses,
-                state.manualItems, state.planRevCells, months
-              )
+              const revenueRows = buildRevenueRows(pod, state.manualItems, state.planRevCells, months)
               const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
 
               return (
@@ -395,10 +329,6 @@ export default function PlanPage() {
                     saveManualCellAmount(itemId, month, status, amount)}
                   onSaveManualStatus={(itemId, month, amount, status) =>
                     saveManualCellStatus(itemId, month, amount, status)}
-                  onSaveAllocStatus={(itemId, month, status) =>
-                    saveAllocStatus(itemId, month, status)}
-                  onSaveAllocAmount={(itemId, month, status, amount) =>
-                    saveAllocCellAmount(itemId, month, status, amount)}
                   onSaveCostAmount={(itemId, month, status, amount) =>
                     saveCostCellAmount(itemId, month, status, amount)}
                   onSaveCostStatus={(itemId, month, amount, status) =>
@@ -408,7 +338,6 @@ export default function PlanPage() {
                   onEditRevenue={(rowId, client, project, podId, cells) =>
                     editManualItem(rowId, client, project, podId, cells)}
                   onDeleteRevenue={rowId => deleteManualItem(rowId)}
-                  onEditSyncedRevenue={rowId => setEditingSyncedId(rowId)}
                   onAddCost={(category, comment, podId, cells) =>
                     addCostItem(podId, category, comment, cells)}
                   onEditCost={(rowId, category, comment, podId, cells) =>
@@ -422,57 +351,11 @@ export default function PlanPage() {
             <SummarySection
               allRevenueRows={allRevenueRows}
               allCostRows={allCostRows}
-              targets={state.targets}
               months={months}
-              onSaveTarget={(month, amount) => saveTarget(month, amount)}
             />
           </div>
         </div>
       </div>
-
-      {/* Synced item edit modal */}
-      {editingSyncedId && (() => {
-        const item = state.revenueItems.find(i => i.id === editingSyncedId)
-        if (!item) return null
-        const allocRows = state.allocations
-          .filter(a => a.revenue_item_id === editingSyncedId)
-          .map(a => ({ month: a.month.slice(0, 7), amount: String(Math.round(a.amount / 1000)) }))
-          .sort((a, b) => a.month.localeCompare(b.month))
-        return (
-          <ItemModal
-            mode="synced"
-            displayName={item.client_name ?? '—'}
-            subtitle={[
-              item.rep_name,
-              item.amount != null ? `${Math.round(item.amount / 1000)} kSEK` : null,
-              item.type === 'booking' ? 'Booked' : 'FC',
-              item.event_date ? new Date(item.event_date).toLocaleDateString('sv-SE') : null,
-            ].filter(Boolean).join(' · ')}
-            pods={state.pods}
-            initialPodId={item.pod_id ?? null}
-            initialRows={allocRows}
-            referenceKSEK={item.amount != null ? Math.round(item.amount / 1000) : undefined}
-            initialNotes={item.notes ?? ''}
-            onClose={() => setEditingSyncedId(null)}
-            onSave={async ({ podId, rows, notes }) => {
-              await supabase.from('revenue_allocations').delete().eq('revenue_item_id', editingSyncedId)
-              if (rows.length > 0) {
-                await supabase.from('revenue_allocations').insert(
-                  rows.map(r => ({ revenue_item_id: editingSyncedId, month: r.month, amount: r.amount }))
-                )
-              }
-              const updates: Record<string, unknown> = {}
-              if (notes !== (item.notes ?? '')) updates.notes = notes || null
-              if (podId !== (item.pod_id ?? null)) updates.pod_id = podId
-              if (Object.keys(updates).length > 0) {
-                await supabase.from('revenue_items').update(updates).eq('id', editingSyncedId)
-              }
-              setEditingSyncedId(null)
-              await load()
-            }}
-          />
-        )
-      })()}
     </div>
   )
 }
