@@ -8,38 +8,42 @@ import {
 import type { RevenueRow, CostRow } from '@/types/database'
 import { sumByStatus, sumCells, monthLabel } from '@/lib/plan-utils'
 
-// Force zero to sit at the same vertical fraction on both axes.
-// p = the fraction of chart height that lives below zero (capped at 0.4).
-function alignedDomains(
+// Build tick arrays at fixed intervals (K=500 kSEK, P=10%) so that
+// zero sits at the same vertical position on both axes.
+function buildAxisTicks(
   kVals: (number | null)[],
   pVals: (number | null)[],
-): { kSek: [number, number]; pct: [number, number] } {
+): { kTicks: number[]; pTicks: number[] } {
   const kv = kVals.filter((v): v is number => v !== null)
   const pv = pVals.filter((v): v is number => v !== null)
-  if (!kv.length || !pv.length) return { kSek: [0, 100], pct: [0, 100] }
 
-  const kNeg = Math.abs(Math.min(0, ...kv))
-  const kPos = Math.max(0, ...kv)
-  const pNeg = Math.abs(Math.min(0, ...pv))
-  const pPos = Math.max(0, ...pv)
+  const K = 500, P = 10
 
-  const fracK = kNeg + kPos > 0 ? kNeg / (kNeg + kPos) : 0
-  const fracP = pNeg + pPos > 0 ? pNeg / (pNeg + pPos) : 0
+  // Steps below / above zero needed to cover the data (+1 step headroom above)
+  let kB = kv.length ? Math.max(0, Math.ceil(Math.abs(Math.min(0, ...kv)) / K))     : 0
+  let kA = kv.length ? Math.max(1, Math.ceil(Math.max(0,  ...kv) / K) + 1)          : 4
+  let pB = pv.length ? Math.max(0, Math.ceil(Math.abs(Math.min(0, ...pv)) / P))      : 0
+  let pA = pv.length ? Math.max(1, Math.ceil(Math.max(0,  ...pv) / P) + 1)          : 4
 
-  // Unified zero-fraction — minimum 8% buffer below zero, max 40%
-  const p = Math.min(0.4, Math.max(fracK, fracP, 0.08))
-  const q = 1 - p
+  // Align zero: extend whichever axis has the smaller negative fraction
+  // Condition kB/kA >= pB/pA rewritten to avoid division: kB*pA >= pB*kA
+  if (kB > 0 || pB > 0) {
+    if (kB * pA >= pB * kA) {
+      pB = Math.max(pB, Math.ceil(pA * kB / kA))
+    } else {
+      kB = Math.max(kB, Math.ceil(kA * pB / pA))
+    }
+  }
 
-  // Extend each axis so its data fits AND zero sits at fraction p
-  const kD = Math.max(kNeg, kPos * p / q)
-  const kU = Math.max(kPos, kNeg > 0 ? kNeg * q / p : 0)
-  const pD = Math.max(pNeg, pPos * p / q)
-  const pU = Math.max(pPos, pNeg > 0 ? pNeg * q / p : 0)
+  const seq = (lo: number, hi: number, step: number) => {
+    const arr: number[] = []
+    for (let v = lo; v <= hi; v += step) arr.push(Math.round(v))
+    return arr
+  }
 
-  // Round up with 10% headroom
   return {
-    kSek: [-Math.ceil(kD * 1.1), Math.ceil(kU * 1.1)],
-    pct:  [-Math.ceil(pD * 1.1), Math.ceil(pU * 1.1)],
+    kTicks: seq(-kB * K, kA * K, K),
+    pTicks: seq(-pB * P, pA * P, P),
   }
 }
 
@@ -70,7 +74,7 @@ export function PlanChart({
     }
   })
 
-  const { kSek: kDomain, pct: pDomain } = alignedDomains(
+  const { kTicks, pTicks } = buildAxisTicks(
     data.flatMap(d => [d.Revenue, d.Costs, d.Profit]),
     data.map(d => d['Margin %']),
   )
@@ -103,7 +107,8 @@ export function PlanChart({
               />
               <YAxis
                 yAxisId="kSEK"
-                domain={kDomain}
+                ticks={kTicks}
+                domain={[kTicks[0], kTicks[kTicks.length - 1]]}
                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                 axisLine={false}
                 tickLine={false}
@@ -113,7 +118,8 @@ export function PlanChart({
               <YAxis
                 yAxisId="pct"
                 orientation="right"
-                domain={pDomain}
+                ticks={pTicks}
+                domain={[pTicks[0], pTicks[pTicks.length - 1]]}
                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                 axisLine={false}
                 tickLine={false}
