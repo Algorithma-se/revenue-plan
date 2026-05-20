@@ -8,6 +8,41 @@ import {
 import type { RevenueRow, CostRow } from '@/types/database'
 import { sumByStatus, sumCells, monthLabel } from '@/lib/plan-utils'
 
+// Force zero to sit at the same vertical fraction on both axes.
+// p = the fraction of chart height that lives below zero (capped at 0.4).
+function alignedDomains(
+  kVals: (number | null)[],
+  pVals: (number | null)[],
+): { kSek: [number, number]; pct: [number, number] } {
+  const kv = kVals.filter((v): v is number => v !== null)
+  const pv = pVals.filter((v): v is number => v !== null)
+  if (!kv.length || !pv.length) return { kSek: [0, 100], pct: [0, 100] }
+
+  const kNeg = Math.abs(Math.min(0, ...kv))
+  const kPos = Math.max(0, ...kv)
+  const pNeg = Math.abs(Math.min(0, ...pv))
+  const pPos = Math.max(0, ...pv)
+
+  const fracK = kNeg + kPos > 0 ? kNeg / (kNeg + kPos) : 0
+  const fracP = pNeg + pPos > 0 ? pNeg / (pNeg + pPos) : 0
+
+  // Unified zero-fraction — minimum 8% buffer below zero, max 40%
+  const p = Math.min(0.4, Math.max(fracK, fracP, 0.08))
+  const q = 1 - p
+
+  // Extend each axis so its data fits AND zero sits at fraction p
+  const kD = Math.max(kNeg, kPos * p / q)
+  const kU = Math.max(kPos, kNeg > 0 ? kNeg * q / p : 0)
+  const pD = Math.max(pNeg, pPos * p / q)
+  const pU = Math.max(pPos, pNeg > 0 ? pNeg * q / p : 0)
+
+  // Round up with 10% headroom
+  return {
+    kSek: [-Math.ceil(kD * 1.1), Math.ceil(kU * 1.1)],
+    pct:  [-Math.ceil(pD * 1.1), Math.ceil(pU * 1.1)],
+  }
+}
+
 export function PlanChart({
   allRevenueRows, allCostRows, months,
 }: {
@@ -34,6 +69,11 @@ export function PlanChart({
       'Margin %':  marginPct,
     }
   })
+
+  const { kSek: kDomain, pct: pDomain } = alignedDomains(
+    data.flatMap(d => [d.Revenue, d.Costs, d.Profit]),
+    data.map(d => d['Margin %']),
+  )
 
   return (
     <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden mb-4 shadow-sm">
@@ -63,6 +103,7 @@ export function PlanChart({
               />
               <YAxis
                 yAxisId="kSEK"
+                domain={kDomain}
                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                 axisLine={false}
                 tickLine={false}
@@ -72,6 +113,7 @@ export function PlanChart({
               <YAxis
                 yAxisId="pct"
                 orientation="right"
+                domain={pDomain}
                 tick={{ fontSize: 11, fill: '#9CA3AF' }}
                 axisLine={false}
                 tickLine={false}
