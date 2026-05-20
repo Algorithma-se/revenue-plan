@@ -146,7 +146,7 @@ export default function PlanPage() {
   ) {
     const { data, error } = await supabase
       .from('manual_revenue_items')
-      .insert({ pod_id: podId, client_name: clientName, project, sort: Date.now() })
+      .insert({ pod_id: podId, client_name: clientName, project, sort: Math.floor(Date.now() / 1000) })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add item')
@@ -194,7 +194,7 @@ export default function PlanPage() {
   ) {
     const { data, error } = await supabase
       .from('cost_items')
-      .insert({ pod_id: podId, category, comment, sort: Date.now() })
+      .insert({ pod_id: podId, category, comment, sort: Math.floor(Date.now() / 1000) })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add cost item')
