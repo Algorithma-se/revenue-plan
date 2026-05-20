@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import type { RevenueRow, CostRow } from '@/types/database'
 import { sumByStatus, sumCells, monthLabel } from '@/lib/plan-utils'
@@ -15,7 +15,11 @@ export function PlanChart({
   allCostRows:    CostRow[]
   months:         readonly string[]
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
+
+  const today = new Date()
+  const currentMonthISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const currentMonthLabel = months.includes(currentMonthISO) ? monthLabel(currentMonthISO) : null
 
   const data = months.map(m => {
     const rev    = sumByStatus(allRevenueRows, m, ['A', 'B'])
@@ -32,7 +36,7 @@ export function PlanChart({
   })
 
   return (
-    <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden mt-2 shadow-sm">
+    <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden mb-4 shadow-sm">
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-4 py-3 hover:bg-[#F9F9F8] transition-colors"
@@ -43,12 +47,12 @@ export function PlanChart({
         >
           <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z" clipRule="evenodd" />
         </svg>
-        <span className="text-xs font-bold text-[#64748B] uppercase tracking-widest">Trend Chart</span>
+        <span className="text-xs font-bold text-[#64748B] uppercase tracking-widest">Trend</span>
       </button>
 
       {open && (
         <div className="px-2 pb-6 pt-2">
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={data} margin={{ top: 8, right: 48, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis
@@ -85,6 +89,16 @@ export function PlanChart({
               <Legend
                 wrapperStyle={{ fontSize: 11, paddingTop: 12, color: '#6B7280' }}
               />
+              {currentMonthLabel && (
+                <ReferenceLine
+                  yAxisId="kSEK"
+                  x={currentMonthLabel}
+                  stroke="#61b5cc"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  label={{ value: 'now', position: 'insideTopRight', fontSize: 10, fill: '#61b5cc', dy: -4 }}
+                />
+              )}
               <Line
                 yAxisId="kSEK" type="monotone" dataKey="Revenue"
                 stroke="#61b5cc" strokeWidth={2} dot={false} connectNulls

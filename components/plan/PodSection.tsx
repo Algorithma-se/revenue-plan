@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
-import { sumCells, sumAllMonths, sumByStatus, computeCB1 } from '@/lib/plan-utils'
+import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
 import { CostItemModal } from './CostItemModal'
 import { ClientBadge } from './ClientBadge'
@@ -54,7 +54,7 @@ function TotalRow({ label, values, fy, accent }: {
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, isNoPod,
+  pod, revenueRows, costRows, pods, months, isNoPod, showOnly,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -66,6 +66,7 @@ export function PodSection({
   pods: Pod[]
   months: readonly string[]
   isNoPod?: boolean
+  showOnly?: 'revenue' | 'costs'
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
@@ -77,7 +78,10 @@ export function PodSection({
   onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
 }) {
-  const storageKey = `plan-collapse-${pod.id}`
+  const storageKey = `plan-collapse-${pod.id}${showOnly ? '-' + showOnly : ''}`
+  const podHeaderLabel = showOnly === 'revenue' && isNoPod ? 'Other Revenue'
+    : showOnly === 'costs' && isNoPod ? 'Other Costs'
+    : pod.name
 
   const [revenueOpen, setRevenueOpen] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -149,18 +153,27 @@ export function PodSection({
       <div className="mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
 
         {/* ── Pod header ─────────────────────────────────────────────────────── */}
-        <div className="px-4 py-3 bg-gradient-to-r from-[#0F0F0F] to-[#1F2937] flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-[#61b5cc]" />
-          <span className="text-sm font-bold text-white tracking-wide">{pod.name}</span>
+        <div className="grid bg-gradient-to-r from-[#0F0F0F] to-[#1F2937]" style={CS}>
+          <div className="px-4 py-2.5 flex items-center gap-2 min-w-0">
+            <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
+            <span className="text-sm font-bold text-white tracking-wide truncate">{podHeaderLabel}</span>
+          </div>
+          {months.map(m => (
+            <div key={m} className="px-1 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wider">
+              {monthLabel(m)}
+            </div>
+          ))}
+          <div className="px-1 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wider">FY</div>
         </div>
 
-        {/* ── Revenue section header ─────────────────────────────────────────── */}
+        {/* ── Revenue section ────────────────────────────────────────────────── */}
+        {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{isNoPod ? 'Other Revenue' : 'Revenue'}</span>
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
@@ -230,14 +243,16 @@ export function PodSection({
         )}
         {/* Always show revenue total — visible even when section is collapsed */}
         {!revenueOpen && <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />}
+        </>}
 
-        {/* ── Costs section header ───────────────────────────────────────────── */}
+        {/* ── Costs section ──────────────────────────────────────────────────── */}
+        {showOnly !== 'revenue' && <>
         <button
           onClick={toggleCosts}
           className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
         >
           <ChevronIcon open={costsOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{isNoPod ? 'Other Costs' : 'Costs'}</span>
+          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
@@ -297,9 +312,10 @@ export function PodSection({
         )}
         {/* Always show cost total — visible even when section is collapsed */}
         {!costsOpen && <TotalRow label="Total costs" values={costTotals} fy={costFY} />}
+        </>}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
-        {!isNoPod && <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
+        {!isNoPod && !showOnly && <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
           <div className="px-3 py-2 text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</div>
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])

@@ -298,6 +298,13 @@ export default function PlanPage() {
           </div>
         </div>
 
+        {/* Trend chart */}
+        <PlanChart
+          allRevenueRows={allRevenueRows}
+          allCostRows={allCostRows}
+          months={months}
+        />
+
         {/* AI Summary */}
         <AISummary
           allRevenueRows={allRevenueRows}
@@ -309,51 +316,48 @@ export default function PlanPage() {
         <div className="overflow-x-auto">
           <div style={{ minWidth: '1100px' }}>
 
-            {/* Month header */}
-            <div className="grid mb-1" style={{ gridTemplateColumns: `200px repeat(${months.length}, 76px) 80px` }}>
-              <div className="px-2 py-1.5 text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">Pod / Item</div>
-              {months.map(m => (
-                <div key={m} className="px-1 py-1.5 text-center text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">
-                  {monthLabel(m)}
-                </div>
-              ))}
-              <div className="px-1 py-1.5 text-center text-xs font-semibold text-[#9CA3AF] uppercase tracking-wider">FY</div>
-            </div>
-
             {/* Pod sections */}
             {state.pods.map(pod => {
+              const isNoPod = pod.name === 'Other NoPod'
               const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
               const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
 
-              return (
-                <PodSection
-                  key={pod.id}
-                  pod={pod}
-                  pods={state.pods}
-                  isNoPod={pod.name === 'Other NoPod'}
-                  months={months}
-                  revenueRows={revenueRows}
-                  costRows={costRows}
-                  onSaveManualAmount={(itemId, month, status, amount) =>
-                    saveManualCellAmount(itemId, month, status, amount)}
-                  onSaveManualStatus={(itemId, month, amount, status) =>
-                    saveManualCellStatus(itemId, month, amount, status)}
-                  onSaveCostAmount={(itemId, month, status, amount) =>
-                    saveCostCellAmount(itemId, month, status, amount)}
-                  onSaveCostStatus={(itemId, month, amount, status) =>
-                    saveCostCellStatus(itemId, month, amount, status)}
-                  onAddRevenue={(client, project, podId, cells) =>
-                    addManualItem(podId, client, project, cells)}
-                  onEditRevenue={(rowId, client, project, podId, cells) =>
-                    editManualItem(rowId, client, project, podId, cells)}
-                  onDeleteRevenue={rowId => deleteManualItem(rowId)}
-                  onAddCost={(category, comment, podId, cells) =>
-                    addCostItem(podId, category, comment, cells)}
-                  onEditCost={(rowId, category, comment, podId, cells) =>
-                    editCostItem(rowId, category, comment, podId, cells)}
-                  onDeleteCost={rowId => deleteCostItem(rowId)}
-                />
-              )
+              const commonProps = {
+                pod,
+                pods: state.pods,
+                months,
+                revenueRows,
+                costRows,
+                onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) =>
+                  saveManualCellAmount(itemId, month, status, amount),
+                onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>
+                  saveManualCellStatus(itemId, month, amount, status),
+                onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) =>
+                  saveCostCellAmount(itemId, month, status, amount),
+                onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>
+                  saveCostCellStatus(itemId, month, amount, status),
+                onAddRevenue: (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
+                  addManualItem(podId, client, project, cells),
+                onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
+                  editManualItem(rowId, client, project, podId, cells),
+                onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
+                onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) =>
+                  addCostItem(podId, category, comment, cells),
+                onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) =>
+                  editCostItem(rowId, category, comment, podId, cells),
+                onDeleteCost: (rowId: string) => deleteCostItem(rowId),
+              }
+
+              if (isNoPod) {
+                return (
+                  <div key={pod.id}>
+                    <PodSection {...commonProps} isNoPod showOnly="revenue" />
+                    <PodSection {...commonProps} isNoPod showOnly="costs" />
+                  </div>
+                )
+              }
+
+              return <PodSection key={pod.id} {...commonProps} />
             })}
 
             {/* Summary */}
@@ -365,12 +369,6 @@ export default function PlanPage() {
           </div>
         </div>
 
-        {/* Trend chart */}
-        <PlanChart
-          allRevenueRows={allRevenueRows}
-          allCostRows={allCostRows}
-          months={months}
-        />
       </div>
     </div>
   )

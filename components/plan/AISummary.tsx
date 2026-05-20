@@ -217,7 +217,7 @@ export function AISummary({
             {parsed.bullets.map((b, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-[#374151]">
                 <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#61b5cc] flex-shrink-0" />
-                <span className="leading-snug">{b}</span>
+                <span className="leading-snug">{b.charAt(0).toUpperCase() + b.slice(1)}</span>
               </li>
             ))}
           </ul>
