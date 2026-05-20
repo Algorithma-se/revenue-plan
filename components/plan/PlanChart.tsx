@@ -60,23 +60,26 @@ export function PlanChart({
   const currentMonthISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   const currentMonthLabel = months.includes(currentMonthISO) ? monthLabel(currentMonthISO) : null
 
+  let ytdRev = 0, ytdCosts = 0
   const data = months.map(m => {
-    const rev    = sumByStatus(allRevenueRows, m, ['A', 'B'])
-    const costs  = sumCells(allCostRows, m)
-    const profit = rev - costs
-    const marginPct = rev > 0 ? Math.round((profit / rev) * 100) : null
+    const rev   = sumByStatus(allRevenueRows, m, ['A', 'B'])
+    const costs = sumCells(allCostRows, m)
+    ytdRev   += rev
+    ytdCosts += costs
+    const profit    = rev - costs
+    const ytdMargin = ytdRev > 0 ? Math.round(((ytdRev - ytdCosts) / ytdRev) * 100) : null
     return {
-      month:       monthLabel(m),
-      Revenue:     rev    > 0 ? Math.round(rev    / 1000) : null,
-      Costs:       costs  > 0 ? Math.round(costs  / 1000) : null,
-      Profit:      rev > 0 || costs > 0 ? Math.round(profit / 1000) : null,
-      'Margin %':  marginPct,
+      month:            monthLabel(m),
+      Revenue:          rev    > 0 ? Math.round(rev    / 1000) : null,
+      Costs:            costs  > 0 ? Math.round(costs  / 1000) : null,
+      Profit:           rev > 0 || costs > 0 ? Math.round(profit / 1000) : null,
+      'Margin % (YTD)': ytdMargin,
     }
   })
 
   const { kTicks, pTicks } = buildAxisTicks(
     data.flatMap(d => [d.Revenue, d.Costs, d.Profit]),
-    data.map(d => d['Margin %']),
+    data.map(d => d['Margin % (YTD)']),
   )
 
   return (
@@ -131,7 +134,7 @@ export function PlanChart({
                 formatter={(value, name) => {
                   const v = typeof value === 'number' ? value : 0
                   const n = String(name ?? '')
-                  return n === 'Margin %' ? [`${v}%`, n] : [`${v.toLocaleString('sv-SE')} kSEK`, n]
+                  return n === 'Margin % (YTD)' ? [`${v}%`, n] : [`${v.toLocaleString('sv-SE')} kSEK`, n]
                 }}
               />
               <Legend
@@ -151,7 +154,7 @@ export function PlanChart({
               <Bar yAxisId="kSEK" dataKey="Costs"   fill="#f97316" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={32} />
               <Bar yAxisId="kSEK" dataKey="Profit"  fill="#16a34a" opacity={0.85} radius={[3, 3, 0, 0]} maxBarSize={32} />
               <Line
-                yAxisId="pct" type="monotone" dataKey="Margin %"
+                yAxisId="pct" type="monotone" dataKey="Margin % (YTD)"
                 stroke="#8b5cf6" strokeWidth={1.5} dot={false} connectNulls
                 strokeDasharray="2 2"
               />
