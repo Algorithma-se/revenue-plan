@@ -267,6 +267,14 @@ export default function PlanPage() {
     <div className="min-h-screen bg-[#F9F9F8]">
       <div className="px-4 py-6 max-w-none">
 
+        {/* Small-screen notice */}
+        <div className="sm:hidden mb-4 flex items-start gap-2 px-3 py-2.5 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl text-xs text-[#B45309]">
+          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5">
+            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.25a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5z"/>
+          </svg>
+          This page is designed for wider screens. Rotate your device or open on a desktop for the full grid.
+        </div>
+
         {/* Title + FY navigation */}
         <div className="mb-6 flex items-end justify-between">
           <div>

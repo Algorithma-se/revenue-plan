@@ -18,14 +18,22 @@ async function requireAuth() {
   return user
 }
 
-export async function getAllowedEmails(): Promise<{ email: string; created_at: string }[]> {
+export async function getAllowedEmails(): Promise<{ email: string; created_at: string; last_login_at: string | null }[]> {
   await requireAuth()
-  const { data, error } = await adminClient()
-    .from('allowed_emails')
-    .select('email, created_at')
-    .order('email')
+  const [{ data, error }, { data: { users } }] = await Promise.all([
+    adminClient().from('allowed_emails').select('email, created_at').order('email'),
+    adminClient().auth.admin.listUsers({ perPage: 1000 }),
+  ])
   if (error) throw error
-  return (data ?? []) as { email: string; created_at: string }[]
+
+  const loginMap = new Map(
+    (users ?? []).map(u => [u.email?.toLowerCase() ?? '', u.last_sign_in_at ?? null])
+  )
+
+  return ((data ?? []) as { email: string; created_at: string }[]).map(row => ({
+    ...row,
+    last_login_at: loginMap.get(row.email.toLowerCase()) ?? null,
+  }))
 }
 
 export async function addAllowedEmail(email: string): Promise<void> {
