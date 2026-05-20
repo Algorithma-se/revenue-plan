@@ -119,13 +119,30 @@ export default function PlanPage() {
     }) : s)
   }
 
-  async function addManualItem(podId: string, clientName: string) {
+  async function addManualItem(
+    podId: string,
+    clientName: string,
+    project: string | null,
+    cells: { month: string; amount: number; status: PlanStatus }[],
+  ) {
     const { data } = await supabase
       .from('manual_revenue_items')
-      .insert({ pod_id: podId, client_name: clientName, sort: Date.now() })
+      .insert({ pod_id: podId, client_name: clientName, project, sort: Date.now() })
       .select()
       .single()
-    if (data) setState(s => s ? ({ ...s, manualItems: [...s.manualItems, data as ManualRevenueItem] }) : s)
+    if (!data) return
+    const newItem = data as ManualRevenueItem
+    setState(s => s ? ({ ...s, manualItems: [...s.manualItems, newItem] }) : s)
+
+    if (cells.length > 0) {
+      const { data: inserted } = await supabase
+        .from('plan_revenue_cells')
+        .insert(cells.map(c => ({ manual_revenue_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
+        .select()
+      if (inserted) {
+        setState(s => s ? ({ ...s, planRevCells: [...s.planRevCells, ...(inserted as PlanRevenueCell[])] }) : s)
+      }
+    }
   }
 
   async function addCostItem(podId: string, category: string) {
@@ -263,7 +280,7 @@ export default function PlanPage() {
                     saveCostCellAmount(itemId, month, status, amount)}
                   onSaveCostStatus={(itemId, month, amount, status) =>
                     saveCostCellStatus(itemId, month, amount, status)}
-                  onAddRevenue={name => addManualItem(pod.id, name)}
+                  onAddRevenue={(client, project, cells) => addManualItem(pod.id, client, project, cells)}
                   onAddCost={cat => addCostItem(pod.id, cat)}
                 />
               )
