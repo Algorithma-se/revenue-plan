@@ -55,10 +55,10 @@ export default function Header() {
             <Image
               src="/logo.svg"
               alt="Algorithma"
-              width={20}
-              height={20}
-              className="w-5 h-5 flex-shrink-0"
-              style={{ color: '#61b5cc' }}
+              width={24}
+              height={24}
+              className="w-6 h-6 flex-shrink-0"
+              unoptimized
             />
             <span className="font-semibold text-[14px] tracking-tight text-[#0F0F0F]">
               algorithma
