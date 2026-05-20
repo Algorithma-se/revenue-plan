@@ -92,7 +92,7 @@ export function PodSection({
   })
 
   function toggleRevenue() {
-    setRevenueOpen(o => {
+    setRevenueOpen((o: boolean) => {
       const next = !o
       try {
         const prev = JSON.parse(localStorage.getItem(storageKey) ?? '{}')
@@ -103,7 +103,7 @@ export function PodSection({
   }
 
   function toggleCosts() {
-    setCostsOpen(o => {
+    setCostsOpen((o: boolean) => {
       const next = !o
       try {
         const prev = JSON.parse(localStorage.getItem(storageKey) ?? '{}')
