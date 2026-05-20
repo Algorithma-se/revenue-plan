@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getAISummary } from '@/app/actions/ai-summary'
 import type { RevenueRow, CostRow, PlanTarget } from '@/types/database'
 import { sumCells, sumByStatus } from '@/lib/plan-utils'
@@ -13,14 +13,12 @@ export function AISummary({
   targets:        PlanTarget[]
   months:         readonly string[]
 }) {
-  const [summary, setSummary]   = useState<string | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(false)
-  const fetchedRef              = useRef(false)
+  const [summary, setSummary] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(false)
 
   useEffect(() => {
-    if (fetchedRef.current) return
-    fetchedRef.current = true
+    let cancelled = false
 
     const today = new Date()
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -34,11 +32,11 @@ export function AISummary({
       costsByMonth:      months.map(m => sumCells(allCostRows, m)),
       targetsByMonth:    months.map(m => targetMap[m] ?? 0),
     })
-      .then(text => { setSummary(text); setLoading(false) })
-      .catch(() => { setError(true); setLoading(false) })
-  }, []) // intentionally run once on mount
+      .then(text => { if (!cancelled) { setSummary(text); setLoading(false) } })
+      .catch(() => { if (!cancelled) { setError(true); setLoading(false) } })
 
-  if (error) return null
+    return () => { cancelled = true }
+  }, []) // intentionally run once on mount; cancellation token handles StrictMode double-invoke
 
   return (
     <div className="bg-white rounded-2xl border border-[#EBEBEB] p-4 mb-6 shadow-sm">
@@ -62,6 +60,8 @@ export function AISummary({
           <div className="h-3.5 bg-[#F3F4F6] rounded-full animate-pulse w-11/12" />
           <div className="h-3.5 bg-[#F3F4F6] rounded-full animate-pulse w-4/5" />
         </div>
+      ) : error ? (
+        <p className="text-xs text-[#9CA3AF] italic">AI summary unavailable.</p>
       ) : (
         <p className="text-sm text-[#374151] leading-relaxed">{summary}</p>
       )}
