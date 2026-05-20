@@ -31,7 +31,7 @@ interface PlanState {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PlanPage() {
-  const [state, setState]   = useState<PlanState | null>(null)
+  const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -119,8 +119,10 @@ export default function PlanPage() {
     }) : s)
   }
 
+  // ── CRUD operations ──────────────────────────────────────────────────────────
+
   async function addManualItem(
-    podId: string,
+    podId: string | null,
     clientName: string,
     project: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
@@ -130,10 +132,7 @@ export default function PlanPage() {
       .insert({ pod_id: podId, client_name: clientName, project, sort: Date.now() })
       .select()
       .single()
-    if (error || !data) {
-      console.error('[addManualItem] insert failed:', error?.message)
-      throw new Error(error?.message ?? 'Failed to add item')
-    }
+    if (error || !data) throw new Error(error?.message ?? 'Failed to add item')
     const newItem = data as ManualRevenueItem
 
     if (cells.length > 0) {
@@ -141,18 +140,78 @@ export default function PlanPage() {
         .from('plan_revenue_cells')
         .insert(cells.map(c => ({ manual_revenue_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
     }
-
-    // Reload to ensure UI reflects DB state
     await load()
   }
 
-  async function addCostItem(podId: string, category: string) {
-    const { data } = await supabase
+  async function editManualItem(
+    itemId: string,
+    clientName: string,
+    project: string | null,
+    podId: string | null,
+    cells: { month: string; amount: number; status: PlanStatus }[],
+  ) {
+    await supabase
+      .from('manual_revenue_items')
+      .update({ client_name: clientName, project, pod_id: podId })
+      .eq('id', itemId)
+    await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
+    if (cells.length > 0) {
+      await supabase
+        .from('plan_revenue_cells')
+        .insert(cells.map(c => ({ manual_revenue_item_id: itemId, month: c.month, amount: c.amount, status: c.status })))
+    }
+    await load()
+  }
+
+  async function deleteManualItem(itemId: string) {
+    await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
+    await supabase.from('manual_revenue_items').delete().eq('id', itemId)
+    await load()
+  }
+
+  async function addCostItem(
+    podId: string | null,
+    category: string,
+    cells: { month: string; amount: number; status: PlanStatus }[],
+  ) {
+    const { data, error } = await supabase
       .from('cost_items')
       .insert({ pod_id: podId, category, sort: Date.now() })
       .select()
       .single()
-    if (data) setState(s => s ? ({ ...s, costItems: [...s.costItems, data as CostItem] }) : s)
+    if (error || !data) throw new Error(error?.message ?? 'Failed to add cost item')
+    const newItem = data as CostItem
+    if (cells.length > 0) {
+      await supabase
+        .from('plan_cost_cells')
+        .insert(cells.map(c => ({ cost_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
+    }
+    await load()
+  }
+
+  async function editCostItem(
+    itemId: string,
+    category: string,
+    podId: string | null,
+    cells: { month: string; amount: number; status: PlanStatus }[],
+  ) {
+    await supabase
+      .from('cost_items')
+      .update({ category, pod_id: podId })
+      .eq('id', itemId)
+    await supabase.from('plan_cost_cells').delete().eq('cost_item_id', itemId)
+    if (cells.length > 0) {
+      await supabase
+        .from('plan_cost_cells')
+        .insert(cells.map(c => ({ cost_item_id: itemId, month: c.month, amount: c.amount, status: c.status })))
+    }
+    await load()
+  }
+
+  async function deleteCostItem(itemId: string) {
+    await supabase.from('plan_cost_cells').delete().eq('cost_item_id', itemId)
+    await supabase.from('cost_items').delete().eq('id', itemId)
+    await load()
   }
 
   // ─── Persist helpers ─────────────────────────────────────────────────────────
@@ -269,6 +328,7 @@ export default function PlanPage() {
                 <PodSection
                   key={pod.id}
                   pod={pod}
+                  pods={state.pods}
                   revenueRows={revenueRows}
                   costRows={costRows}
                   onSaveManualAmount={(itemId, month, status, amount) =>
@@ -281,8 +341,16 @@ export default function PlanPage() {
                     saveCostCellAmount(itemId, month, status, amount)}
                   onSaveCostStatus={(itemId, month, amount, status) =>
                     saveCostCellStatus(itemId, month, amount, status)}
-                  onAddRevenue={(client, project, cells) => addManualItem(pod.id, client, project, cells)}
-                  onAddCost={cat => addCostItem(pod.id, cat)}
+                  onAddRevenue={(client, project, podId, cells) =>
+                    addManualItem(podId, client, project, cells)}
+                  onEditRevenue={(rowId, client, project, podId, cells) =>
+                    editManualItem(rowId, client, project, podId, cells)}
+                  onDeleteRevenue={rowId => deleteManualItem(rowId)}
+                  onAddCost={(category, podId, cells) =>
+                    addCostItem(podId, category, cells)}
+                  onEditCost={(rowId, category, podId, cells) =>
+                    editCostItem(rowId, category, podId, cells)}
+                  onDeleteCost={rowId => deleteCostItem(rowId)}
                 />
               )
             })}

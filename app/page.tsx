@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { RevenueItem, RevenueAllocation, Pod } from '@/types/database'
 
@@ -9,49 +9,22 @@ interface ItemWithAllocations extends RevenueItem {
   allocatedTotal: number
 }
 
-// ── Pod selector ──────────────────────────────────────────────────────────────
-
-function PodSelector({ item, pods }: { item: ItemWithAllocations; pods: Pod[] }) {
-  const [saving, setSaving] = useState(false)
-  const selectRef = useRef<HTMLSelectElement>(null)
-
-  async function handleChange(podId: string) {
-    setSaving(true)
-    await supabase
-      .from('revenue_items')
-      .update({ pod_id: podId || null })
-      .eq('id', item.id)
-    setSaving(false)
-  }
-
-  return (
-    <select
-      ref={selectRef}
-      defaultValue={item.pod_id ?? ''}
-      onChange={e => handleChange(e.target.value)}
-      disabled={saving}
-      onClick={e => e.stopPropagation()}
-      className="text-xs border border-[#EBEBEB] rounded-lg px-2 py-1 bg-[#F9F9F8] text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] disabled:opacity-50 max-w-[140px]"
-    >
-      <option value="">No pod</option>
-      {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-    </select>
-  )
-}
-
 // ── Allocation modal ──────────────────────────────────────────────────────────
 
 function AllocationModal({
   item,
+  pods,
   onClose,
   onSaved,
   onDeleted,
 }: {
   item: ItemWithAllocations
+  pods: Pod[]
   onClose: () => void
   onSaved: () => void
   onDeleted: () => void
 }) {
+  const [podId, setPodId] = useState<string | null>(item.pod_id ?? null)
   const [rows, setRows] = useState<{ month: string; amount: string }[]>(() => {
     if (item.allocations.length > 0) {
       return item.allocations.map(a => ({ month: a.month.slice(0, 7), amount: String(a.amount) }))
@@ -108,8 +81,11 @@ function AllocationModal({
         if (insertErr) throw insertErr
       }
 
-      if (notes !== (item.notes ?? '')) {
-        await supabase.from('revenue_items').update({ notes: notes || null }).eq('id', item.id)
+      const updates: Record<string, unknown> = {}
+      if (notes !== (item.notes ?? '')) updates.notes = notes || null
+      if (podId !== (item.pod_id ?? null)) updates.pod_id = podId
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('revenue_items').update(updates).eq('id', item.id)
       }
 
       onSaved()
@@ -155,6 +131,19 @@ function AllocationModal({
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
           </button>
+        </div>
+
+        {/* Pod */}
+        <div className="mb-4">
+          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
+          <select
+            value={podId ?? ''}
+            onChange={e => setPodId(e.target.value || null)}
+            className={`${modalInput} w-full`}
+          >
+            <option value="">No pod</option>
+            {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
         </div>
 
         {/* Month rows */}
@@ -401,13 +390,10 @@ export default function WorkListPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-[#6B7280] mb-2">
+              <div className="flex items-center gap-3 text-xs text-[#6B7280]">
                 {item.rep_name && <span>{item.rep_name}</span>}
                 {item.amount != null && <span className="font-semibold text-[#0F0F0F]">{item.amount.toLocaleString('sv-SE')} SEK</span>}
                 {item.event_date && <span>{new Date(item.event_date).toLocaleDateString('sv-SE')}</span>}
-              </div>
-              <div onClick={e => e.stopPropagation()}>
-                <PodSelector item={item} pods={pods} />
               </div>
             </div>
           )
@@ -423,7 +409,6 @@ export default function WorkListPage() {
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Type</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Client</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Rep</th>
-                <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Pod</th>
                 <th className="text-right px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Amount</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Event date</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-[#6B7280]">Synced</th>
@@ -435,7 +420,7 @@ export default function WorkListPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[#F9F9F8]">
-                    {Array.from({ length: 9 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-5 py-3">
                         <div className="h-4 bg-[#F3F4F6] rounded-lg animate-pulse w-20" />
                       </td>
@@ -444,7 +429,7 @@ export default function WorkListPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
+                  <td colSpan={8} className="px-5 py-16 text-center text-[#9CA3AF] text-sm">
                     No items yet. Push a forecast or booking from Sales Weekly.
                   </td>
                 </tr>
@@ -468,9 +453,6 @@ export default function WorkListPage() {
                     </td>
                     <td className="px-5 py-3.5 font-medium text-[#0F0F0F]">{item.client_name ?? '—'}</td>
                     <td className="px-5 py-3.5 text-[#6B7280]">{item.rep_name ?? '—'}</td>
-                    <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                      <PodSelector item={item} pods={pods} />
-                    </td>
                     <td className="px-5 py-3.5 text-right font-semibold text-[#0F0F0F] whitespace-nowrap">
                       {item.amount != null ? `${item.amount.toLocaleString('sv-SE')} SEK` : '—'}
                     </td>
@@ -515,6 +497,7 @@ export default function WorkListPage() {
       {selectedItem && (
         <AllocationModal
           item={selectedItem}
+          pods={pods}
           onClose={() => setSelectedId(null)}
           onSaved={() => { setSelectedId(null); loadData() }}
           onDeleted={() => { setSelectedId(null); loadData() }}

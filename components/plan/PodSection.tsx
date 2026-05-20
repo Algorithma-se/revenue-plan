@@ -4,11 +4,10 @@ import { useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
 import { FISCAL_MONTHS, sumCells, sumAllMonths, computeCB1 } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
-import { AddRowButton } from './AddRowButton'
-import { AddRevenueModal } from './AddRevenueModal'
+import { RevenueItemModal } from './RevenueItemModal'
+import { CostItemModal } from './CostItemModal'
 
 const COL_STYLE = { gridTemplateColumns: '200px repeat(12, 76px) 80px' }
-const TOTAL_MONTHS = FISCAL_MONTHS.length + 2
 
 function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: number }) {
   return (
@@ -27,23 +26,32 @@ function TotalRow({ label, values, fy }: { label: string; values: number[]; fy: 
 }
 
 export function PodSection({
-  pod, revenueRows, costRows,
+  pod, revenueRows, costRows, pods,
   onSaveManualAmount, onSaveManualStatus,
   onSaveAllocStatus, onSaveCostAmount, onSaveCostStatus,
-  onAddRevenue, onAddCost,
+  onAddRevenue, onEditRevenue, onDeleteRevenue,
+  onAddCost, onEditCost, onDeleteCost,
 }: {
   pod: Pod
   revenueRows: RevenueRow[]
   costRows: CostRow[]
+  pods: Pod[]
   onSaveManualAmount: (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus: (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveAllocStatus:  (itemId: string, month: string, status: PlanStatus) => Promise<void>
   onSaveCostAmount:   (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostStatus:   (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onAddRevenue: (client: string, project: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onAddCost:    (cat: string) => Promise<void>
+  onAddRevenue:    (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onEditRevenue:   (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onDeleteRevenue: (rowId: string) => Promise<void>
+  onAddCost:    (category: string, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onEditCost:   (rowId: string, category: string, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onDeleteCost: (rowId: string) => Promise<void>
 }) {
-  const [showAddRevenue, setShowAddRevenue] = useState(false)
+  const [addingRevenue, setAddingRevenue]         = useState(false)
+  const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
+  const [addingCost, setAddingCost]               = useState(false)
+  const [editingCostRow, setEditingCostRow]       = useState<CostRow | null>(null)
 
   const revTotals  = FISCAL_MONTHS.map(m => sumCells(revenueRows, m))
   const revFY      = sumAllMonths(revenueRows)
@@ -63,7 +71,10 @@ export function PodSection({
         {/* Revenue rows */}
         {revenueRows.map(row => (
           <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={COL_STYLE}>
-            <div className="px-2 py-1 flex flex-col justify-center min-w-0">
+            <div
+              className={`px-2 py-1 flex flex-col justify-center min-w-0 ${row.kind === 'manual' ? 'cursor-pointer hover:text-[#61b5cc]' : ''}`}
+              onClick={row.kind === 'manual' ? () => setEditingRevenueRow(row) : undefined}
+            >
               <span className="text-xs text-[#0F0F0F] font-medium truncate" title={row.client_name ?? ''}>
                 {row.client_name ?? '—'}
               </span>
@@ -104,7 +115,7 @@ export function PodSection({
         {/* Add revenue button */}
         <div className="border-b border-[#F3F4F6]">
           <button
-            onClick={() => setShowAddRevenue(true)}
+            onClick={() => setAddingRevenue(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#9CA3AF] hover:text-[#61b5cc] transition-colors"
           >
             <span className="text-base leading-none">+</span>
@@ -123,7 +134,12 @@ export function PodSection({
         {/* Cost rows */}
         {costRows.map(row => (
           <div key={row.id} className="grid border-b border-[#F3F4F6] hover:bg-[#FAFAFA] transition-colors" style={COL_STYLE}>
-            <div className="px-2 py-1 flex items-center text-xs text-[#6B7280] truncate">{row.category}</div>
+            <div
+              className="px-2 py-1 flex items-center text-xs text-[#6B7280] truncate cursor-pointer hover:text-[#61b5cc]"
+              onClick={() => setEditingCostRow(row)}
+            >
+              {row.category}
+            </div>
             {FISCAL_MONTHS.map(m => {
               const cell = row.cells[m]
               return (
@@ -144,14 +160,15 @@ export function PodSection({
           </div>
         ))}
 
-        {/* Add cost row */}
+        {/* Add cost button */}
         <div className="border-b border-[#F3F4F6]">
-          <AddRowButton
-            label="Add cost item"
-            placeholder="Category name…"
-            onAdd={onAddCost}
-            colSpan={TOTAL_MONTHS}
-          />
+          <button
+            onClick={() => setAddingCost(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#9CA3AF] hover:text-[#61b5cc] transition-colors"
+          >
+            <span className="text-base leading-none">+</span>
+            Add cost item
+          </button>
         </div>
 
         {/* Cost total */}
@@ -186,12 +203,62 @@ export function PodSection({
         </div>
       </div>
 
-      {showAddRevenue && (
-        <AddRevenueModal
-          onClose={() => setShowAddRevenue(false)}
-          onSave={async (client, project, cells) => {
-            await onAddRevenue(client, project, cells)
-            setShowAddRevenue(false)
+      {addingRevenue && (
+        <RevenueItemModal
+          mode="add"
+          pods={pods}
+          defaultPodId={pod.id}
+          onClose={() => setAddingRevenue(false)}
+          onSave={async (client, project, podId, cells) => {
+            await onAddRevenue(client, project, podId, cells)
+            setAddingRevenue(false)
+          }}
+        />
+      )}
+
+      {editingRevenueRow && (
+        <RevenueItemModal
+          mode="edit"
+          pods={pods}
+          editRow={editingRevenueRow}
+          onClose={() => setEditingRevenueRow(null)}
+          onSave={async (client, project, podId, cells) => {
+            await onEditRevenue(editingRevenueRow.id, client, project, podId, cells)
+            setEditingRevenueRow(null)
+          }}
+          onDelete={async () => {
+            await onDeleteRevenue(editingRevenueRow.id)
+            setEditingRevenueRow(null)
+          }}
+        />
+      )}
+
+      {addingCost && (
+        <CostItemModal
+          mode="add"
+          pods={pods}
+          defaultPodId={pod.id}
+          onClose={() => setAddingCost(false)}
+          onSave={async (category, podId, cells) => {
+            await onAddCost(category, podId, cells)
+            setAddingCost(false)
+          }}
+        />
+      )}
+
+      {editingCostRow && (
+        <CostItemModal
+          mode="edit"
+          pods={pods}
+          editRow={editingCostRow}
+          onClose={() => setEditingCostRow(null)}
+          onSave={async (category, podId, cells) => {
+            await onEditCost(editingCostRow.id, category, podId, cells)
+            setEditingCostRow(null)
+          }}
+          onDelete={async () => {
+            await onDeleteCost(editingCostRow.id)
+            setEditingCostRow(null)
           }}
         />
       )}
