@@ -361,7 +361,7 @@ export default function PlanPage() {
             const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
             const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
             const mobileCommonProps = {
-              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth,
+              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells,
               onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveManualCellAmount(itemId, month, status, amount),
               onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
               onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
@@ -399,6 +399,7 @@ export default function PlanPage() {
                 months,
                 revenueRows,
                 costRows,
+                allPlanRevCells: state.planRevCells,
                 onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) =>
                   saveManualCellAmount(itemId, month, status, amount),
                 onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>

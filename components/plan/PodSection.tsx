@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
+import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell } from '@/types/database'
 import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
 import { CostItemModal } from './CostItemModal'
@@ -67,7 +67,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, isNoPod, showOnly, mobileMonth,
+  pod, revenueRows, costRows, pods, months, allPlanRevCells, isNoPod, showOnly, mobileMonth,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -78,6 +78,7 @@ export function PodSection({
   costRows: CostRow[]
   pods: Pod[]
   months: readonly string[]
+  allPlanRevCells: PlanRevenueCell[]
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
   mobileMonth?: string
@@ -147,9 +148,9 @@ export function PodSection({
   const costFY     = sumAllMonths(costRows, months)
 
   function revenueRowsForModal(row: RevenueRow): { month: string; amount: string; status: string }[] {
-    return Object.entries(row.cells)
-      .filter(([_, c]) => c.amount > 0)
-      .map(([month, c]) => ({ month: month.slice(0, 7), amount: String(Math.round(c.amount / 1000)), status: c.status }))
+    return allPlanRevCells
+      .filter(c => c.manual_revenue_item_id === row.id && c.amount > 0)
+      .map(c => ({ month: c.month.slice(0, 7), amount: String(Math.round(c.amount / 1000)), status: c.status }))
       .sort((a, b) => a.month.localeCompare(b.month))
   }
 
