@@ -53,8 +53,20 @@ function TotalRow({ label, values, fy, accent }: {
   )
 }
 
+function MobileTotalRow({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  const fmt = (v: number) => v === 0
+    ? <span className="text-[#D1D5DB]">—</span>
+    : <>{Math.round(v / 1000).toLocaleString('sv-SE')} <span className="text-[#9CA3AF] font-normal">kSEK</span></>
+  return (
+    <div className={`flex items-center justify-between px-4 py-2.5 ${accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'}`}>
+      <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{label}</span>
+      <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{fmt(value)}</span>
+    </div>
+  )
+}
+
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, isNoPod, showOnly,
+  pod, revenueRows, costRows, pods, months, isNoPod, showOnly, mobileMonth,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -67,6 +79,7 @@ export function PodSection({
   months: readonly string[]
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
+  mobileMonth?: string
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
@@ -150,7 +163,7 @@ export function PodSection({
 
   return (
     <>
-      <div className="mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+      <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
 
         {/* ── Pod header ─────────────────────────────────────────────────────── */}
         <div className="grid bg-gradient-to-r from-[#0F0F0F] to-[#1F2937]" style={CS}>
@@ -340,6 +353,102 @@ export function PodSection({
           </div>
         </div>}
       </div>
+
+      {/* ── Mobile view ────────────────────────────────────────────────────────── */}
+      {mobileMonth && (() => {
+        const mIdx      = months.indexOf(mobileMonth)
+        const mRevTotal  = mIdx >= 0 ? revTotals[mIdx]  : 0
+        const mCostTotal = mIdx >= 0 ? costTotals[mIdx] : 0
+        const mCB        = computeCB1(mRevTotal, mCostTotal)
+        return (
+          <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+            {/* Pod header */}
+            <div className="px-4 py-2.5 bg-gradient-to-r from-[#0F0F0F] to-[#1F2937] flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
+              <span className="text-sm font-bold text-white tracking-wide truncate">{podHeaderLabel}</span>
+            </div>
+
+            {/* Revenue section */}
+            {showOnly !== 'costs' && <>
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+                <ChevronIcon open={revenueOpen} />
+                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+              </button>
+              {revenueOpen && <>
+                {revenueRows.map((row, i) => {
+                  const cell    = row.cells[mobileMonth] ?? { amount: 0, status: 'F' as PlanStatus }
+                  const isAging = mobileMonth < curMonth && cell.status !== 'A' && cell.amount > 0
+                  return (
+                    <div key={row.id} className={`flex items-center justify-between px-4 py-2 border-b border-[#F3F4F6] ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
+                      <div className="flex flex-col min-w-0 flex-1 cursor-pointer mr-3" onClick={() => setEditingRevenueRow(row)}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-[#111827] truncate">{row.client_name ?? '—'}</span>
+                          <ClientBadge row={row} />
+                        </div>
+                        {row.project && <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>}
+                      </div>
+                      <EditableCell
+                        amount={cell.amount} status={cell.status} isAging={isAging}
+                        onSaveAmount={v => onSaveManualAmount(row.id, mobileMonth, cell.status, v)}
+                        onSaveStatus={s => onSaveManualStatus(row.id, mobileMonth, cell.amount, s)}
+                      />
+                    </div>
+                  )
+                })}
+                <div className="border-b border-[#F3F4F6]">
+                  <button onClick={() => setAddingRevenue(true)} className="flex items-center gap-1.5 px-4 py-2 text-xs text-[#9CA3AF] hover:text-[#2563EB] hover:bg-[#EFF6FF] w-full transition-colors">
+                    <span className="text-sm font-light leading-none">+</span> Add revenue item
+                  </button>
+                </div>
+              </>}
+              <MobileTotalRow label="Total revenue (A+B)" value={mRevTotal} accent />
+            </>}
+
+            {/* Costs section */}
+            {showOnly !== 'revenue' && <>
+              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+                <ChevronIcon open={costsOpen} />
+                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+              </button>
+              {costsOpen && <>
+                {costRows.map((row, i) => {
+                  const cell    = row.cells[mobileMonth] ?? { amount: 0, status: 'F' as PlanStatus }
+                  const isAging = mobileMonth < curMonth && cell.status !== 'A' && cell.amount > 0
+                  return (
+                    <div key={row.id} className={`flex items-center justify-between px-4 py-2 border-b border-[#F3F4F6] ${i % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
+                      <div className="flex flex-col min-w-0 flex-1 cursor-pointer mr-3" onClick={() => setEditingCostRow(row)}>
+                        <span className="text-xs text-[#374151] truncate">{row.category}</span>
+                        {row.comment && <span className="text-[10px] text-[#9CA3AF] truncate">{row.comment}</span>}
+                      </div>
+                      <EditableCell
+                        amount={cell.amount} status={cell.status} isAging={isAging}
+                        onSaveAmount={v => onSaveCostAmount(row.id, mobileMonth, cell.status, v)}
+                        onSaveStatus={s => onSaveCostStatus(row.id, mobileMonth, cell.amount, s)}
+                      />
+                    </div>
+                  )
+                })}
+                <div className="border-b border-[#F3F4F6]">
+                  <button onClick={() => setAddingCost(true)} className="flex items-center gap-1.5 px-4 py-2 text-xs text-[#9CA3AF] hover:text-[#EA580C] hover:bg-[#FFF7ED] w-full transition-colors">
+                    <span className="text-sm font-light leading-none">+</span> Add cost item
+                  </button>
+                </div>
+              </>}
+              <MobileTotalRow label="Total costs" value={mCostTotal} />
+            </>}
+
+            {/* CB1% */}
+            {!isNoPod && !showOnly && (
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#F8FAFC] border-t-2 border-[#E5E7EB]">
+                <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</span>
+                <span className={`text-xs font-bold ${mCB === null ? 'text-[#D1D5DB]' : mCB >= 20 ? 'text-[#16A34A]' : mCB >= 0 ? 'text-[#D97706]' : 'text-[#DC2626]'}`}>
+                  {mCB === null ? '—' : `${Math.round(mCB)}%`}
+                </span>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Modals ─────────────────────────────────────────────────────────────── */}
       {addingRevenue && (

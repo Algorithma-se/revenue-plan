@@ -36,6 +36,16 @@ export default function PlanPage() {
 
   const months = getFiscalMonths(fyStart)
 
+  const [mobileMonthIdx, setMobileMonthIdx] = useState(() => {
+    const today = new Date()
+    const cur = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+    const idx = getFiscalMonths(currentFyStart()).indexOf(cur)
+    return idx >= 0 ? idx : 0
+  })
+  const safeMobileIdx = Math.min(mobileMonthIdx, months.length - 1)
+  const mobileMonth   = months[safeMobileIdx]
+  const mobileLabel   = `${monthLabel(mobileMonth)} ${mobileMonth.slice(0, 4)}`
+
   const load = useCallback(async () => {
     const [
       { data: pods },
@@ -267,14 +277,6 @@ export default function PlanPage() {
     <div className="min-h-screen bg-[#F9F9F8]">
       <div className="px-4 py-6 max-w-none">
 
-        {/* Small-screen notice */}
-        <div className="sm:hidden mb-4 flex items-start gap-2 px-3 py-2.5 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl text-xs text-[#B45309]">
-          <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5">
-            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.25a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5z"/>
-          </svg>
-          This page is designed for wider screens. Rotate your device or open on a desktop for the full grid.
-        </div>
-
         {/* Title + FY navigation */}
         <div className="mb-6 flex items-end justify-between">
           <div>
@@ -320,8 +322,60 @@ export default function PlanPage() {
           months={months}
         />
 
-        {/* Grid */}
-        <div className="overflow-x-auto">
+        {/* Mobile month navigator */}
+        <div className="sm:hidden flex items-center justify-between mb-4 bg-white rounded-2xl border border-[#EBEBEB] px-4 py-3 shadow-sm">
+          <button
+            onClick={() => setMobileMonthIdx(i => Math.max(i - 1, 0))}
+            disabled={safeMobileIdx === 0}
+            className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#F9F9F8] transition-all disabled:opacity-30"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M9.707 3.293a1 1 0 010 1.414L6.414 8l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-[#0F0F0F]">{mobileLabel}</span>
+          <button
+            onClick={() => setMobileMonthIdx(i => Math.min(i + 1, months.length - 1))}
+            disabled={safeMobileIdx === months.length - 1}
+            className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#F9F9F8] transition-all disabled:opacity-30"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M6.293 3.293a1 1 0 000 1.414L9.586 8l-3.293 3.293a1 1 0 001.414 1.414l4-4a1 1 0 000-1.414l-4-4a1 1 0 00-1.414 0z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile pods */}
+        <div className="sm:hidden space-y-4">
+          {state.pods.map(pod => {
+            const isNoPod = pod.name === 'Other NoPod'
+            const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
+            const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
+            const mobileCommonProps = {
+              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth,
+              onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveManualCellAmount(itemId, month, status, amount),
+              onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
+              onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
+              onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveCostCellStatus(itemId, month, amount, status),
+              onAddRevenue: (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => addManualItem(podId, client, project, cells),
+              onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => editManualItem(rowId, client, project, podId, cells),
+              onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
+              onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => addCostItem(podId, category, comment, cells),
+              onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => editCostItem(rowId, category, comment, podId, cells),
+              onDeleteCost: (rowId: string) => deleteCostItem(rowId),
+            }
+            if (isNoPod) return (
+              <div key={pod.id}>
+                <PodSection {...mobileCommonProps} isNoPod showOnly="revenue" />
+                <PodSection {...mobileCommonProps} isNoPod showOnly="costs" />
+              </div>
+            )
+            return <PodSection key={pod.id} {...mobileCommonProps} />
+          })}
+        </div>
+
+        {/* Desktop grid */}
+        <div className="hidden sm:block overflow-x-auto">
           <div style={{ minWidth: '1100px' }}>
 
             {/* Pod sections */}
