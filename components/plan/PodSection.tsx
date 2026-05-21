@@ -30,11 +30,12 @@ function ChevronIcon({ open }: { open: boolean }) {
   )
 }
 
-function TotalRow({ label, values, fy, accent }: {
+function TotalRow({ label, values, fy, accent, highlightIdx }: {
   label: string
   values: number[]
   fy: number
   accent?: boolean
+  highlightIdx?: number
 }) {
   const textColor = accent ? 'text-[#0F0F0F]' : 'text-[#374151]'
   const bg = accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'
@@ -42,7 +43,7 @@ function TotalRow({ label, values, fy, accent }: {
     <div className={`grid ${bg}`} style={colStyle(values.length)}>
       <div className={`px-3 py-2 text-xs font-semibold ${textColor} truncate`}>{label}</div>
       {values.map((v, i) => (
-        <div key={i} className={`px-1 py-2 text-right text-xs font-semibold ${textColor}`}>
+        <div key={i} className={`px-1 py-2 text-right text-xs font-semibold ${textColor} ${i === highlightIdx ? 'bg-[#EFF9FF]' : ''}`}>
           {v === 0 ? <span className="text-[#D1D5DB]">—</span> : Math.round(v / 1000).toLocaleString('sv-SE')}
         </div>
       ))}
@@ -136,7 +137,8 @@ export function PodSection({
   const [addingCost, setAddingCost]               = useState(false)
   const [editingCostRow, setEditingCostRow]       = useState<CostRow | null>(null)
 
-  const curMonth = currentMonthStr()
+  const curMonth    = currentMonthStr()
+  const curMonthIdx = months.indexOf(curMonth)
 
   // A+B only for totals and CB1%
   const revTotals  = months.map(m => sumByStatus(revenueRows, m, ['A', 'B']))
@@ -171,9 +173,12 @@ export function PodSection({
             <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
             <span className="text-sm font-bold text-white tracking-wide truncate">{podHeaderLabel}</span>
           </div>
-          {months.map(m => (
-            <div key={m} className="px-1 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wider">
-              {monthLabel(m)}
+          {months.map((m, i) => (
+            <div key={m} className={`px-1 py-2 text-center flex flex-col items-center justify-center gap-0.5 ${i === curMonthIdx ? 'bg-white/8' : ''}`}>
+              {i === curMonthIdx && <div className="w-1 h-1 rounded-full bg-[#61b5cc]" />}
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${i === curMonthIdx ? 'text-white' : 'text-white/40'}`}>
+                {monthLabel(m)}
+              </span>
             </div>
           ))}
           <div className="px-1 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wider">FY</div>
@@ -215,18 +220,19 @@ export function PodSection({
                 </div>
 
                 {/* Cells */}
-                {months.map(m => {
+                {months.map((m, i) => {
                   const cell = row.cells[m]
                   const isAging = m < curMonth && cell.status !== 'A' && cell.amount > 0
                   return (
-                    <EditableCell
-                      key={m}
-                      amount={cell.amount}
-                      status={cell.status}
-                      isAging={isAging}
-                      onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
-                      onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
-                    />
+                    <div key={m} className={i === curMonthIdx ? 'bg-[#EFF9FF]' : ''}>
+                      <EditableCell
+                        amount={cell.amount}
+                        status={cell.status}
+                        isAging={isAging}
+                        onSaveAmount={v => onSaveManualAmount(row.id, m, cell.status, v)}
+                        onSaveStatus={s => onSaveManualStatus(row.id, m, cell.amount, s)}
+                      />
+                    </div>
                   )
                 })}
 
@@ -251,7 +257,7 @@ export function PodSection({
             </div>
 
             {/* Revenue total (A+B only) */}
-            <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent />
+            <TotalRow label="Total revenue (A+B)" values={revTotals} fy={revFY} accent highlightIdx={curMonthIdx} />
           </>
         )}
         {/* Always show revenue total — visible even when section is collapsed */}
@@ -286,18 +292,19 @@ export function PodSection({
                     <span className="text-[10px] text-[#9CA3AF] truncate mt-0.5">{row.comment}</span>
                   )}
                 </div>
-                {months.map(m => {
+                {months.map((m, i) => {
                   const cell = row.cells[m]
                   const isAging = m < curMonth && cell.status !== 'A' && cell.amount > 0
                   return (
-                    <EditableCell
-                      key={m}
-                      amount={cell.amount}
-                      status={cell.status}
-                      isAging={isAging}
-                      onSaveAmount={v => onSaveCostAmount(row.id, m, cell.status, v)}
-                      onSaveStatus={s => onSaveCostStatus(row.id, m, cell.amount, s)}
-                    />
+                    <div key={m} className={i === curMonthIdx ? 'bg-[#EFF9FF]' : ''}>
+                      <EditableCell
+                        amount={cell.amount}
+                        status={cell.status}
+                        isAging={isAging}
+                        onSaveAmount={v => onSaveCostAmount(row.id, m, cell.status, v)}
+                        onSaveStatus={s => onSaveCostStatus(row.id, m, cell.amount, s)}
+                      />
+                    </div>
                   )
                 })}
                 <div className="px-1 py-1.5 flex items-center justify-end text-xs font-semibold text-[#374151]">
@@ -320,7 +327,7 @@ export function PodSection({
             </div>
 
             {/* Cost total */}
-            <TotalRow label="Total costs" values={costTotals} fy={costFY} />
+            <TotalRow label="Total costs" values={costTotals} fy={costFY} highlightIdx={curMonthIdx} />
           </>
         )}
         {/* Always show cost total — visible even when section is collapsed */}
@@ -333,7 +340,7 @@ export function PodSection({
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
             return (
-              <div key={m} className={`px-1 py-2 text-right text-xs font-bold ${
+              <div key={m} className={`px-1 py-2 text-right text-xs font-bold ${i === curMonthIdx ? 'bg-[#EFF9FF]' : ''} ${
                 cb === null ? 'text-[#D1D5DB]' :
                 cb >= 20   ? 'text-[#16A34A]' :
                 cb >= 0    ? 'text-[#D97706]' : 'text-[#DC2626]'
