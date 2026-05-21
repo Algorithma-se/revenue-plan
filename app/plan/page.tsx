@@ -16,6 +16,7 @@ import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
 import { AISummary } from '@/components/plan/AISummary'
 import { PlanChart } from '@/components/plan/PlanChart'
+import { RevenueDonut } from '@/components/plan/RevenueDonut'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
@@ -324,12 +325,19 @@ export default function PlanPage() {
           months={months}
         />
 
-        {/* AI Summary */}
-        <AISummary
-          allRevenueRows={allRevenueRows}
-          allCostRows={allCostRows}
-          months={months}
-        />
+        {/* AI Summary + Revenue Mix */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="flex-1 min-w-0">
+            <AISummary
+              allRevenueRows={allRevenueRows}
+              allCostRows={allCostRows}
+              months={months}
+            />
+          </div>
+          <div className="sm:w-72 flex-shrink-0">
+            <RevenueDonut allRevenueRows={allRevenueRows} months={months} />
+          </div>
+        </div>
 
         {/* Mobile month navigator */}
         <div className="sm:hidden flex items-center justify-between mb-4 bg-white rounded-2xl border border-[#EBEBEB] px-4 py-3 shadow-sm">

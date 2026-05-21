@@ -152,7 +152,7 @@ export function AISummary({
   const parsed = result ? parseSummary(result.summary) : null
 
   return (
-    <div className="bg-white rounded-2xl border border-[#EBEBEB] p-4 mb-6 shadow-sm">
+    <div className="bg-white rounded-2xl border border-[#EBEBEB] p-4 shadow-sm h-full">
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-3">
