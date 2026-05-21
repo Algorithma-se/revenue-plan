@@ -88,8 +88,8 @@ export function PodSection({
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostStatus:    (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onAddRevenue:        (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onAddRevenue:        (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
   onDeleteRevenue:     (rowId: string) => Promise<void>
   onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
   onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
@@ -160,8 +160,9 @@ export function PodSection({
     const cells = (data.rows ?? []).map(r => ({
       month: r.month, amount: r.amount, status: (r.status as PlanStatus) ?? 'F',
     }))
-    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, cells)
-    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, cells)
+    const notes = data.notes.trim() || null
+    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, notes, cells)
+    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, notes, cells)
   }
 
   const CS = colStyle(months.length)
@@ -482,6 +483,7 @@ export function PodSection({
           initialClientName={editingRevenueRow.client_name ?? ''}
           initialComment={editingRevenueRow.project ?? ''}
           initialPodId={editingRevenueRow.pod_id}
+          initialNotes={editingRevenueRow.notes ?? ''}
           initialRows={revenueRowsForModal(editingRevenueRow)}
           onClose={() => setEditingRevenueRow(null)}
           onSave={async data => {

@@ -47,6 +47,7 @@ export interface ManualRevenueItem {
   pod_id: string | null
   client_name: string
   project: string | null
+  notes: string | null
   sort: number
   created_at: string
 }
@@ -97,6 +98,7 @@ export interface RevenueRow {
   client_name: string | null
   project: string | null
   pod_id: string | null
+  notes: string | null
   cells: Record<string, { amount: number; status: PlanStatus }>
 }
 

@@ -59,7 +59,7 @@ export function buildRevenueRows(
         const cell = planRevCells.find(c => c.manual_revenue_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
-      return { kind: 'manual' as const, id: item.id, client_name: item.client_name, project: item.project ?? null, pod_id: pod.id, cells }
+      return { kind: 'manual' as const, id: item.id, client_name: item.client_name, project: item.project ?? null, pod_id: pod.id, notes: item.notes ?? null, cells }
     })
 }
 

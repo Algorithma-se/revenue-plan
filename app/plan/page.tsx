@@ -109,11 +109,12 @@ export default function PlanPage() {
     podId: string | null,
     clientName: string,
     project: string | null,
+    notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
   ) {
     const { data, error } = await supabase
       .from('manual_revenue_items')
-      .insert({ pod_id: podId, client_name: clientName, project, sort: Math.floor(Date.now() / 1000) })
+      .insert({ pod_id: podId, client_name: clientName, project, notes, sort: Math.floor(Date.now() / 1000) })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add item')
@@ -132,11 +133,12 @@ export default function PlanPage() {
     clientName: string,
     project: string | null,
     podId: string | null,
+    notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
   ) {
     await supabase
       .from('manual_revenue_items')
-      .update({ client_name: clientName, project, pod_id: podId })
+      .update({ client_name: clientName, project, pod_id: podId, notes })
       .eq('id', itemId)
     if (cells.length > 0) {
       // Upsert changed cells (preserves status for unchanged cells not sent from modal)
@@ -383,8 +385,8 @@ export default function PlanPage() {
               onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
               onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
               onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveCostCellStatus(itemId, month, amount, status),
-              onAddRevenue: (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => addManualItem(podId, client, project, cells),
-              onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => editManualItem(rowId, client, project, podId, cells),
+              onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => addManualItem(podId, client, project, notes, cells),
+              onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => editManualItem(rowId, client, project, podId, notes, cells),
               onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
               onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => addCostItem(podId, category, comment, cells),
               onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => editCostItem(rowId, category, comment, podId, cells),
@@ -426,10 +428,10 @@ export default function PlanPage() {
                   saveCostCellAmount(itemId, month, status, amount),
                 onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>
                   saveCostCellStatus(itemId, month, amount, status),
-                onAddRevenue: (client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
-                  addManualItem(podId, client, project, cells),
-                onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
-                  editManualItem(rowId, client, project, podId, cells),
+                onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
+                  addManualItem(podId, client, project, notes, cells),
+                onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
+                  editManualItem(rowId, client, project, podId, notes, cells),
                 onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
                 onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) =>
                   addCostItem(podId, category, comment, cells),
