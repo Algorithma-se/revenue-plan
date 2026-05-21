@@ -19,15 +19,18 @@ export function RevenueDonut({
   const curMonth  = currentMonthStr()
   const ytdMonths = months.filter(m => m <= curMonth)
 
-  const byCustomer = allRevenueRows
-    .filter(r => r.client_name)
-    .map(r => ({
-      name:  r.client_name!,
-      value: ytdMonths.reduce((s, m) => {
-        const cell = r.cells[m]
-        return s + (cell && (cell.status === 'A' || cell.status === 'B') ? cell.amount : 0)
-      }, 0),
-    }))
+  const totals = new Map<string, number>()
+  for (const r of allRevenueRows) {
+    if (!r.client_name) continue
+    const rowTotal = ytdMonths.reduce((s, m) => {
+      const cell = r.cells[m]
+      return s + (cell && (cell.status === 'A' || cell.status === 'B') ? cell.amount : 0)
+    }, 0)
+    totals.set(r.client_name, (totals.get(r.client_name) ?? 0) + rowTotal)
+  }
+
+  const byCustomer = Array.from(totals.entries())
+    .map(([name, value]) => ({ name, value }))
     .filter(c => c.value > 0)
     .sort((a, b) => b.value - a.value)
 
