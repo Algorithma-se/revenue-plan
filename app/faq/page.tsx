@@ -84,7 +84,15 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         q: 'Can I edit or delete a revenue row?',
-        a: 'Yes — click the client name in any revenue row to open the edit modal. You can update the name, pod assignment, and monthly amounts. The trash icon in the modal deletes the row.',
+        a: 'Yes — click the client name in any revenue row to open the edit modal. You can update the client name, comment, pod assignment, monthly amounts, and notes. Existing A/B/F statuses are preserved when you save. The delete button in the modal removes the row entirely.',
+      },
+      {
+        q: 'What is the Notes field in the edit modal?',
+        a: 'A free-text field for any context you want to store against a revenue item — deal background, stakeholder names, caveats, etc. Notes are saved to the database and pre-filled the next time you open the modal.',
+      },
+      {
+        q: 'What happens when I add a new month row in the edit modal?',
+        a: 'The month field is pre-filled with the calendar month immediately after the last existing row, so you can tab straight to the amount without manually setting the date. You can still change it if needed.',
       },
       {
         q: 'How do I add a cost item?',
@@ -96,7 +104,24 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         q: 'What does the trend chart show?',
-        a: 'A line chart across all 12 months of the fiscal year showing Revenue (A+B), Costs, Profit, and Margin % (right axis). A teal vertical line marks the current month. The chart is open by default and can be collapsed.',
+        a: 'A bar chart across all 12 months of the fiscal year with bars for Revenue (A+B), Costs, and Profit on the left axis (kSEK), plus a dashed line for YTD accumulated Margin % on the right axis. A teal vertical line marks the current month. The chart is open by default and can be collapsed.',
+      },
+      {
+        q: 'What is the Revenue Mix chart?',
+        a: 'A donut chart to the right of the AI summary showing the share of YTD A+B revenue by customer. The top 5 customers are named individually; all others are grouped as "Others". The centre shows the total kSEK. Each customer also has a RAG trend arrow (see below) and a share percentage in the legend.',
+      },
+      {
+        q: 'What do the RAG trend arrows mean on revenue rows and in the Revenue Mix?',
+        a: (
+          <span>
+            Each customer shows a small coloured circle with an arrow reflecting how their revenue is trending — calculated by comparing the average A+B revenue in the <em>last three months</em> against the average of the earlier YTD months:
+            <br /><br />
+            <strong className="text-[#16A34A]">Green ↑</strong>: last-3-month average is more than 10% above the earlier average.<br />
+            <strong className="text-[#D97706]">Amber →</strong>: within ±10% (stable).<br />
+            <strong className="text-[#DC2626]">Red ↓</strong>: last-3-month average is more than 10% below the earlier average.<br /><br />
+            The trend is aggregated across all rows for the same client (e.g. a customer with five project rows is evaluated as one). No arrow is shown if there are fewer than four YTD months of data.
+          </span>
+        ),
       },
       {
         q: 'What is the "aging" highlight on cells?',
@@ -117,7 +142,7 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
     items: [
       {
         q: 'What does the AI summary show?',
-        a: 'A short weekly analysis of firm profitability — covering current-month revenue vs costs, margin health, top client mix, the quarter outlook, and a read toward fiscal year end. It sits below the trend chart and acts as a narrative voice-over to the numbers.',
+        a: 'A short weekly analysis of firm profitability — covering current-month revenue vs costs, margin health, top client mix, the quarter outlook, and a read toward fiscal year end. It sits below the trend chart alongside the Revenue Mix donut, acting as a narrative voice-over to the numbers.',
       },
       {
         q: 'How often does it refresh?',
