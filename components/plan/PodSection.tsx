@@ -146,16 +146,16 @@ export function PodSection({
   const costTotals = months.map(m => sumCells(costRows, m))
   const costFY     = sumAllMonths(costRows, months)
 
-  function revenueRowsForModal(row: RevenueRow): { month: string; amount: string }[] {
+  function revenueRowsForModal(row: RevenueRow): { month: string; amount: string; status: string }[] {
     return Object.entries(row.cells)
       .filter(([_, c]) => c.amount > 0)
-      .map(([month, c]) => ({ month: month.slice(0, 7), amount: String(Math.round(c.amount / 1000)) }))
+      .map(([month, c]) => ({ month: month.slice(0, 7), amount: String(Math.round(c.amount / 1000)), status: c.status }))
       .sort((a, b) => a.month.localeCompare(b.month))
   }
 
   function handleRevenueModalSave(row: RevenueRow | null, data: ItemModalSaveData) {
     const cells = (data.rows ?? []).map(r => ({
-      month: r.month, amount: r.amount, status: 'F' as PlanStatus,
+      month: r.month, amount: r.amount, status: (r.status as PlanStatus) ?? 'F',
     }))
     if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, cells)
     return onAddRevenue(data.clientName!, data.project ?? null, data.podId, cells)

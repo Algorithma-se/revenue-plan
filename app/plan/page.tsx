@@ -136,11 +136,20 @@ export default function PlanPage() {
       .from('manual_revenue_items')
       .update({ client_name: clientName, project, pod_id: podId })
       .eq('id', itemId)
-    await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
     if (cells.length > 0) {
-      await supabase
-        .from('plan_revenue_cells')
-        .insert(cells.map(c => ({ manual_revenue_item_id: itemId, month: c.month, amount: c.amount, status: c.status })))
+      // Upsert changed cells (preserves status for unchanged cells not sent from modal)
+      await supabase.from('plan_revenue_cells').upsert(
+        cells.map(c => ({ manual_revenue_item_id: itemId, month: c.month, amount: c.amount, status: c.status })),
+        { onConflict: 'manual_revenue_item_id,month' },
+      )
+      // Remove cells the user deleted from the modal (months no longer in the save data)
+      const months = cells.map(c => c.month)
+      await supabase.from('plan_revenue_cells')
+        .delete()
+        .eq('manual_revenue_item_id', itemId)
+        .not('month', 'in', `(${months.join(',')})`)
+    } else {
+      await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
     }
     await load()
   }

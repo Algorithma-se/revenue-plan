@@ -5,7 +5,7 @@ import type { Pod } from '@/types/database'
 
 export interface ItemModalSaveData {
   podId:      string | null
-  rows:       { month: string; amount: number }[]  // month: 'YYYY-MM-01', amount in SEK
+  rows:       { month: string; amount: number; status?: string }[]  // month: 'YYYY-MM-01', amount in SEK
   notes:      string
   clientName?: string
   project?:   string | null
@@ -36,7 +36,7 @@ export function ItemModal({
   initialComment?:    string
   pods:               Pod[]
   initialPodId:       string | null
-  initialRows:        { month: string; amount: string }[]
+  initialRows:        { month: string; amount: string; status?: string }[]
   referenceKSEK?:     number
   initialNotes?:      string
   onClose:  () => void
@@ -67,7 +67,7 @@ export function ItemModal({
     try {
       const validRows = rows
         .filter(r => r.month && r.amount && parseFloat(r.amount) > 0)
-        .map(r => ({ month: r.month + '-01', amount: Math.round(parseFloat(r.amount) * 1000) }))
+        .map(r => ({ month: r.month + '-01', amount: Math.round(parseFloat(r.amount) * 1000), status: r.status }))
       await onSave({
         podId,
         rows: validRows,
@@ -195,7 +195,16 @@ export function ItemModal({
         </div>
 
         <button
-          onClick={() => setRows(r => [...r, { month: '', amount: '' }])}
+          onClick={() => setRows(r => {
+            const last = r[r.length - 1]
+            let nextMonth = ''
+            if (last?.month) {
+              const [y, mo] = last.month.split('-').map(Number)
+              const d = new Date(y, mo, 1) // mo is 1-indexed → becomes next month in 0-indexed
+              nextMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            }
+            return [...r, { month: nextMonth, amount: '' }]
+          })}
           className="text-sm text-[#61b5cc] hover:text-[#4a9ab8] font-medium flex items-center gap-1 mb-4 transition-colors"
         >
           <span className="text-base leading-none">+</span> Add month
