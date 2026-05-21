@@ -1,31 +1,25 @@
-import type { RevenueRow } from '@/types/database'
+import type { Trend } from '@/lib/plan-utils'
 
-type Tier = 'recurring' | 'active' | 'new'
+export function ClientBadge({ trend }: { trend: Trend | null }) {
+  if (!trend) return null
 
-function getBadgeTier(row: RevenueRow): Tier {
-  const cells = Object.values(row.cells)
-  const monthsWithAmount = cells.filter(c => c.amount > 0).length
-  const hasActuals  = cells.some(c => c.status === 'A')
-  const hasBookings = cells.some(c => c.status === 'B')
+  const cfg = {
+    up:   { bg: '#16A34A', title: 'Trending up'   },
+    flat: { bg: '#D97706', title: 'Stable'         },
+    down: { bg: '#DC2626', title: 'Trending down'  },
+  }[trend]
 
-  if (hasActuals && monthsWithAmount >= 6) return 'recurring'
-  if (monthsWithAmount >= 3 || hasBookings) return 'active'
-  return 'new'
-}
-
-const STYLES: Record<Tier, { pill: string; dot: string; label: string }> = {
-  recurring: { pill: 'bg-[#F0FDF4] text-[#15803D]', dot: 'bg-[#22C55E]', label: 'Recurring' },
-  active:    { pill: 'bg-[#EFF6FF] text-[#2563EB]', dot: 'bg-[#60A5FA]', label: 'Active' },
-  new:       { pill: 'bg-[#F9FAFB] text-[#9CA3AF]', dot: 'bg-[#D1D5DB]', label: 'New' },
-}
-
-export function ClientBadge({ row }: { row: RevenueRow }) {
-  const tier = getBadgeTier(row)
-  const s = STYLES[tier]
   return (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none whitespace-nowrap ${s.pill}`}>
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
-      {s.label}
-    </span>
+    <div
+      title={cfg.title}
+      className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
+      style={{ background: cfg.bg }}
+    >
+      <svg viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-2 h-2">
+        {trend === 'up'   && <path d="M2 9 L6 3 L10 9" />}
+        {trend === 'flat' && <path d="M2 6 H10 M7 3.5 L10 6 L7 8.5" />}
+        {trend === 'down' && <path d="M2 3 L6 9 L10 3" />}
+      </svg>
+    </div>
   )
 }

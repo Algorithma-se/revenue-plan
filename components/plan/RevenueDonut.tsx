@@ -2,68 +2,14 @@
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import type { RevenueRow } from '@/types/database'
+import { computeClientTrend } from '@/lib/plan-utils'
+import { ClientBadge } from '@/components/plan/ClientBadge'
 
 const COLORS = ['#61b5cc', '#8b5cf6', '#f97316', '#16a34a', '#f59e0b', '#94a3b8']
 
 function currentMonthStr() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-}
-
-type Trend = 'up' | 'flat' | 'down'
-
-function computeTrend(
-  allRevenueRows: RevenueRow[],
-  customerName: string,
-  ytdMonths: string[],
-): Trend | null {
-  if (ytdMonths.length < 4) return null
-
-  const lastThree = ytdMonths.slice(-3)
-  const earlier   = ytdMonths.slice(0, -3)
-
-  const sumMonths = (ms: string[]) =>
-    allRevenueRows
-      .filter(r => r.client_name === customerName)
-      .reduce((total, r) =>
-        total + ms.reduce((s, m) => {
-          const cell = r.cells[m]
-          return s + (cell && (cell.status === 'A' || cell.status === 'B') ? cell.amount : 0)
-        }, 0)
-      , 0)
-
-  const avgLast3   = sumMonths(lastThree) / 3
-  const avgEarlier = sumMonths(earlier) / earlier.length
-
-  if (avgEarlier === 0 && avgLast3 === 0) return null
-  if (avgEarlier === 0) return 'up'
-
-  const ratio = avgLast3 / avgEarlier
-  if (ratio > 1.10) return 'up'
-  if (ratio < 0.90) return 'down'
-  return 'flat'
-}
-
-function TrendBadge({ trend }: { trend: Trend }) {
-  const cfg = {
-    up:   { bg: '#16A34A', title: 'Trending up' },
-    flat: { bg: '#D97706', title: 'Stable'      },
-    down: { bg: '#DC2626', title: 'Trending down' },
-  }[trend]
-
-  return (
-    <div
-      title={cfg.title}
-      className="w-3.5 h-3.5 rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ background: cfg.bg }}
-    >
-      <svg viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-2 h-2">
-        {trend === 'up'   && <path d="M2 9 L6 3 L10 9" />}
-        {trend === 'flat' && <path d="M2 6 H10 M7 3.5 L10 6 L7 8.5" />}
-        {trend === 'down' && <path d="M2 3 L6 9 L10 3" />}
-      </svg>
-    </div>
-  )
 }
 
 export function RevenueDonut({
@@ -98,8 +44,8 @@ export function RevenueDonut({
   const total       = data.reduce((s, d) => s + d.value, 0)
 
   // Pre-compute trends for named customers (not "Others")
-  const trends = new Map<string, Trend | null>(
-    top5.map(c => [c.name, computeTrend(allRevenueRows, c.name, ytdMonths)])
+  const trends = new Map(
+    top5.map(c => [c.name, computeClientTrend(allRevenueRows, c.name, ytdMonths)])
   )
 
   return (
@@ -155,7 +101,7 @@ export function RevenueDonut({
             <div key={d.name} className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
               <span className="text-[11px] text-[#374151] truncate flex-1 min-w-0">{d.name}</span>
-              {trend && <TrendBadge trend={trend} />}
+              {trend && <ClientBadge trend={trend} />}
               <span className="text-[11px] font-semibold text-[#0F0F0F] tabular-nums">
                 {Math.round(d.value / 1000).toLocaleString('sv-SE')}
               </span>

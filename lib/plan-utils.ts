@@ -93,6 +93,38 @@ export function sumAllMonths(
   return months.reduce((s, m) => s + sumCells(rows, m), 0)
 }
 
+export type Trend = 'up' | 'flat' | 'down'
+
+export function computeClientTrend(
+  allRevenueRows: RevenueRow[],
+  clientName: string,
+  ytdMonths: readonly string[],
+): Trend | null {
+  if (ytdMonths.length < 4) return null
+  const lastThree = ytdMonths.slice(-3)
+  const earlier   = ytdMonths.slice(0, -3)
+
+  const sumMonths = (ms: readonly string[]) =>
+    allRevenueRows
+      .filter(r => r.client_name === clientName)
+      .reduce((total, r) =>
+        total + ms.reduce((s, m) => {
+          const cell = r.cells[m]
+          return s + (cell && (cell.status === 'A' || cell.status === 'B') ? cell.amount : 0)
+        }, 0), 0)
+
+  const avgLast3   = sumMonths(lastThree) / 3
+  const avgEarlier = sumMonths(earlier) / earlier.length
+
+  if (avgEarlier === 0 && avgLast3 === 0) return null
+  if (avgEarlier === 0) return 'up'
+
+  const ratio = avgLast3 / avgEarlier
+  if (ratio > 1.10) return 'up'
+  if (ratio < 0.90) return 'down'
+  return 'flat'
+}
+
 export function sumByStatus(
   rows: Array<{ cells: Record<string, { amount: number; status: PlanStatus }> }>,
   month: string,

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell } from '@/types/database'
 import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
+import type { Trend } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
 import { CostItemModal } from './CostItemModal'
 import { ClientBadge } from './ClientBadge'
@@ -67,7 +68,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, allPlanRevCells, isNoPod, showOnly, mobileMonth,
+  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, isNoPod, showOnly, mobileMonth,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -79,6 +80,7 @@ export function PodSection({
   pods: Pod[]
   months: readonly string[]
   allPlanRevCells: PlanRevenueCell[]
+  clientTrends: Map<string, Trend | null>
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
   mobileMonth?: string
@@ -213,7 +215,7 @@ export function PodSection({
                     <span className="text-xs text-[#111827] font-medium truncate group-hover:text-[#2563EB] transition-colors" title={row.client_name ?? ''}>
                       {row.client_name ?? '—'}
                     </span>
-                    <ClientBadge row={row} />
+                    <ClientBadge trend={clientTrends.get(row.client_name ?? '') ?? null} />
                   </div>
                   {row.project && (
                     <span className="text-[10px] text-[#9CA3AF] truncate mt-0.5">{row.project}</span>
@@ -391,7 +393,7 @@ export function PodSection({
                       <div className="flex flex-col min-w-0 flex-1 cursor-pointer mr-3" onClick={() => setEditingRevenueRow(row)}>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-medium text-[#111827] truncate">{row.client_name ?? '—'}</span>
-                          <ClientBadge row={row} />
+                          <ClientBadge trend={clientTrends.get(row.client_name ?? '') ?? null} />
                         </div>
                         {row.project && <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>}
                       </div>

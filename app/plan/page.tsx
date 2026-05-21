@@ -5,8 +5,9 @@ import { supabase } from '@/lib/supabase'
 import {
   getFiscalMonths, fyLabel, currentFyStart,
   monthLabel, buildRevenueRows, buildCostRows,
-  sumCells, sumAllMonths,
+  sumCells, sumAllMonths, computeClientTrend,
 } from '@/lib/plan-utils'
+import type { Trend } from '@/lib/plan-utils'
 import type {
   Pod, ManualRevenueItem, PlanRevenueCell,
   CostItem, PlanCostCell,
@@ -283,6 +284,14 @@ export default function PlanPage() {
     buildCostRows(pod, state.costItems, state.costCells, months)
   )
 
+  const today    = new Date()
+  const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const ytdMonths = months.filter(m => m <= curMonth)
+  const clientNames = [...new Set(allRevenueRows.map(r => r.client_name).filter((n): n is string => !!n))]
+  const clientTrends = new Map<string, Trend | null>(
+    clientNames.map(name => [name, computeClientTrend(allRevenueRows, name, ytdMonths)])
+  )
+
   return (
     <div className="min-h-screen bg-[#F9F9F8]">
       <div className="px-4 py-6 max-w-none">
@@ -369,7 +378,7 @@ export default function PlanPage() {
             const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
             const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
             const mobileCommonProps = {
-              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells,
+              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells, clientTrends,
               onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveManualCellAmount(itemId, month, status, amount),
               onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
               onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
@@ -408,6 +417,7 @@ export default function PlanPage() {
                 revenueRows,
                 costRows,
                 allPlanRevCells: state.planRevCells,
+                clientTrends,
                 onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) =>
                   saveManualCellAmount(itemId, month, status, amount),
                 onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>
