@@ -36,14 +36,16 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
   const [loading,        setLoading]        = useState(false)
   const [error,          setError]          = useState<string | null>(null)
 
-  const missingPaymentTerms = !paymentTerms.trim()
-  const startInPast         = !!startDate && startDate < today
-  const missingTotal        = !totalKsek || Number(totalKsek) <= 0
+  const emptyClient       = !clientName.trim()
+  const emptyTotal        = !totalKsek || Number(totalKsek) <= 0
+  const emptyStartDate    = !startDate
+  const emptyPaymentTerms = !paymentTerms.trim()
+  const emptyModel        = !invoicingModel
+  const startInPast       = !!startDate && startDate < today
 
-  const warnings: { text: string; field?: string }[] = []
-  if (missingPaymentTerms) warnings.push({ text: 'Payment terms not found — add them before generating (e.g. "Net 30")', field: 'paymentTerms' })
-  if (startInPast)         warnings.push({ text: `Start date ${startDate} is in the past — confirm this is correct`, field: 'startDate' })
-  if (missingTotal)        warnings.push({ text: 'Contract value is missing — invoice schedule amounts will be approximate', field: 'total' })
+  // Only show the amber banner for things that need a sentence of explanation
+  const warnings: string[] = []
+  if (startInPast) warnings.push(`Start date ${startDate} is in the past — confirm this is correct`)
 
   async function persist(): Promise<SowDocument | null> {
     const result = await updateSowParsedFields(sow.id, {
@@ -53,6 +55,7 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
       parsed_end_date:        endDate || null,
       parsed_payment_terms:   paymentTerms.trim() || null,
       invoicing_model:        invoicingModel || null,
+      parsed_deliverables:    deliverables,
     })
     if (result.error || !result.data) {
       setError(result.error ?? 'Failed to save changes')
@@ -108,21 +111,27 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
         <div className="space-y-4">
           {/* Editable fields */}
           <div className="grid grid-cols-2 gap-3">
-            <EditField label="Client" value={clientName} onChange={setClientName} placeholder="Client name" />
+            <EditField
+              label="Client"
+              value={clientName}
+              onChange={setClientName}
+              placeholder="Client name"
+              highlight={emptyClient ? 'error' : undefined}
+            />
             <EditField
               label="Total value (kSEK)"
               value={totalKsek}
               onChange={setTotalKsek}
               type="number"
               placeholder="e.g. 1 048"
-              highlight={missingTotal ? 'warn' : undefined}
+              highlight={emptyTotal ? 'error' : undefined}
             />
             <EditField
               label="Start date"
               value={startDate}
               onChange={setStartDate}
               type="date"
-              highlight={startInPast ? 'warn' : undefined}
+              highlight={emptyStartDate ? 'error' : startInPast ? 'warn' : undefined}
             />
             <EditField label="End date" value={endDate} onChange={setEndDate} type="date" />
             <EditField
@@ -130,7 +139,7 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
               value={paymentTerms}
               onChange={setPaymentTerms}
               placeholder="e.g. Net 30"
-              highlight={missingPaymentTerms ? 'warn' : undefined}
+              highlight={emptyPaymentTerms ? 'error' : undefined}
             />
             <div>
               <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">
@@ -139,7 +148,11 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
               <select
                 value={invoicingModel}
                 onChange={e => setInvoicingModel(e.target.value)}
-                className="w-full bg-[#F9F9F8] border border-[#EBEBEB] rounded-lg px-2.5 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent transition-all"
+                className={`w-full bg-[#F9F9F8] border rounded-lg px-2.5 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+                  emptyModel
+                    ? 'border-[#FCA5A5] focus:ring-[#EF4444]'
+                    : 'border-[#EBEBEB] focus:ring-[#61b5cc]'
+                }`}
               >
                 <option value="">— unknown —</option>
                 {MODEL_OPTIONS.map(o => (
@@ -149,13 +162,13 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
             </div>
           </div>
 
-          {/* Warnings */}
+          {/* Warnings — only for things needing explanation, not just empty fields */}
           {warnings.length > 0 && (
             <div className="space-y-1.5">
               {warnings.map((w, i) => (
                 <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl">
                   <span className="text-[#D97706] text-xs mt-0.5 flex-shrink-0">⚠</span>
-                  <p className="text-xs text-[#92400E]">{w.text}</p>
+                  <p className="text-xs text-[#92400E]">{w}</p>
                 </div>
               ))}
             </div>

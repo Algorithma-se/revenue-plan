@@ -252,6 +252,7 @@ export async function updateSowParsedFields(
     parsed_end_date:        string | null
     parsed_payment_terms:   string | null
     invoicing_model:        string | null
+    parsed_deliverables:    SowDeliverable[]
   },
 ): Promise<{ data?: SowDocument; error?: string }> {
   try {
@@ -271,6 +272,7 @@ export async function updateSowParsedFields(
         parsed_start_date:      updates.parsed_start_date,
         parsed_end_date:        updates.parsed_end_date,
         parsed_payment_terms:   updates.parsed_payment_terms,
+        parsed_deliverables:    updates.parsed_deliverables,
         parsed_raw:             updatedRaw,
         updated_at:             new Date().toISOString(),
       })
