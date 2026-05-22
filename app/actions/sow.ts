@@ -125,13 +125,21 @@ STEP 2 — Output this exact JSON structure:
   ]
 }
 
-CRITICAL — Rate period detection:
-Before filling any amount field, identify the stated billing period:
+CRITICAL — Rate period detection (read carefully before computing any amount):
+Identify the stated billing period for every rate, then convert:
   HOURLY rate  → hourly_rate_sek = rate × conversion. monthly_fee_sek = null unless separately stated.
-  DAILY rate   → hourly_rate_sek = daily_rate / 8 × conversion.
-  WEEKLY rate  → monthly_fee_sek = weekly_rate × 4.35 × conversion. hourly_rate_sek = weekly_rate / 40 × conversion.
+  DAILY rate   → hourly_rate_sek = daily_rate ÷ 8 × conversion.
+  WEEKLY rate  → monthly_fee_sek = weekly_rate × 4.35 × conversion.
+                 hourly_rate_sek = weekly_rate ÷ 40 × conversion.
   MONTHLY rate → monthly_fee_sek = monthly_rate × conversion directly.
-  NEVER use a weekly, daily, or hourly figure as a monthly fee without conversion.
+
+NEVER use a weekly, daily, or hourly figure directly as monthly_fee_sek without conversion.
+
+Concrete examples:
+  "USD 140/hour"           → hourly_rate_sek = 140 × 10 = 1 400 SEK/h
+  "USD 11 750/week"        → monthly_fee_sek = 11750 × 4.35 × 10 = 511 125 SEK  (NOT 117 500!)
+  "USD 50 000/month"       → monthly_fee_sek = 50000 × 10 = 500 000 SEK
+  "SEK 85 000/month"       → monthly_fee_sek = 85 000 SEK
 
 Field rules:
 total_value_sek — convert to SEK (EUR≈11, USD≈10, GBP≈13). Use the stated total or upper-range estimate. If not stated, sum all deliverable amounts.

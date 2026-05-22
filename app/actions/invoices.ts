@@ -97,7 +97,37 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
       })
     })
 
-  // ── capacity / retainer ────────────────────────────────────────────────
+  // ── capacity / retainer with explicit deliverable schedule ───────────
+  // Prefer parser-provided deliverables when present; fall back to uniform
+  // monthly loop only when no deliverables exist. Uses total-sum sanity
+  // check to detect rate-period mis-parsing (weekly used as monthly, etc.)
+  } else if ((model === 'capacity' || model === 'time_and_materials') && deliverables.length > 0) {
+    const fallbackPerEntry = total / deliverables.length
+    const deliverableSum   = deliverables.reduce((s, d) => s + (d.amount_sek ?? 0), 0)
+    // If deliverable amounts sum within 30% of total, trust them; otherwise
+    // the LLM mis-converted the rate period → distribute total evenly.
+    const amountsValid = deliverableSum > 0 && Math.abs(deliverableSum - total) / total < 0.30
+    deliverables.forEach((d, i) => {
+      const issueDate   = resolveInvoiceDate(d, start, i)
+      const amount      = amountsValid ? (d.amount_sek ?? fallbackPerEntry) : fallbackPerEntry
+      const isMilestone = !!(d.label && d.invoice_timing === 'on_completion')
+      drafts.push({
+        manual_revenue_item_id: itemId,
+        sow_document_id:        sowId,
+        invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
+        issue_date:             toIso(issueDate),
+        due_date:               toIso(addDays(issueDate, termDays)),
+        amount_sek:             Math.round(amount),
+        payment_trigger:        isMilestone ? 'milestone' : 'date',
+        milestone_label:        d.label ?? null,
+        status:                 'draft',
+        paid_date:              null,
+        notes:                  null,
+        sort:                   i,
+      })
+    })
+
+  // ── capacity / retainer — uniform monthly loop (no deliverables) ──────
   } else if ((model === 'capacity' || model === 'time_and_materials') && end) {
     const numMonths = monthsBetween(start, end)
     const perMonth  = monthlyFee ?? (numMonths > 0 ? total / numMonths : total)
@@ -113,7 +143,7 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
         issue_date:             toIso(issueDate),
         due_date:               toIso(addDays(issueDate, termDays)),
-        amount_sek:             perMonth,
+        amount_sek:             Math.round(perMonth),
         payment_trigger:        'date',
         milestone_label:        null,
         status:                 'draft',
