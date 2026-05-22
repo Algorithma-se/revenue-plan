@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type {
-  SowDocument, Invoice, InvoiceDraft, InvoiceSuggestion, InvoiceStatus,
+  SowDocument, Invoice, InvoiceDraft, InvoiceSuggestion, InvoiceStatus, SowParsedRaw,
 } from '@/types/database'
 import { getInvoices, getAllInvoiceItems, saveInvoices, getAggregatedCashFlow } from '@/app/actions/invoices'
 import { getSowDocuments, getSowDownloadUrl, deleteSow } from '@/app/actions/sow'
@@ -249,6 +249,18 @@ function InvoicesContent() {
   const latestSow = sowDocs[sowDocs.length - 1] ?? null
   const contractValueSek = latestSow?.parsed_total_value_sek != null
     ? Number(latestSow.parsed_total_value_sek) : null
+  const latestRaw = latestSow?.parsed_raw as SowParsedRaw | null
+
+  const MODEL_LABEL: Record<string, string> = {
+    milestone: 'Milestone', time_and_materials: 'T&M',
+    capacity: 'Capacity', fixed_fee: 'Fixed fee',
+  }
+
+  function fmtMonth(iso: string | null) {
+    if (!iso) return null
+    const d = new Date(iso + 'T12:00:00')
+    return d.toLocaleString('en-SE', { month: 'short', year: 'numeric' })
+  }
 
   // Unique pods that have items
   const pods = Array.from(new Set(sidebarItems.map(i => i.podId)))
@@ -397,37 +409,85 @@ function InvoicesContent() {
               <>
                 {/* Client header */}
                 {selectedItem && (
-                  <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
-                    <div className="w-9 h-9 rounded-xl bg-[#0F0F0F] flex items-center justify-center flex-shrink-0">
-                      <span className="text-sm font-bold text-white">
-                        {(selectedItem.clientName ?? '?')[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="text-base font-bold text-[#0F0F0F] truncate">
-                        {selectedItem.clientName ?? '(no name)'}
-                      </h2>
-                      {selectedItem.podId && podNames.get(selectedItem.podId) && (
-                        <p className="text-xs text-[#9CA3AF]">{podNames.get(selectedItem.podId)}</p>
+                  <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
+                    {/* Main row */}
+                    <div className="flex items-center gap-3 px-5 pt-4 pb-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#0F0F0F] flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm font-bold text-white">
+                          {(selectedItem.clientName ?? '?')[0].toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-base font-bold text-[#0F0F0F] truncate">
+                          {selectedItem.clientName ?? '(no name)'}
+                        </h2>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {selectedItem.project && (
+                            <span className="text-xs text-[#6B7280]">{selectedItem.project}</span>
+                          )}
+                          {selectedItem.project && selectedItem.podId && podNames.get(selectedItem.podId) && (
+                            <span className="text-[#D1D5DB] text-xs">·</span>
+                          )}
+                          {selectedItem.podId && podNames.get(selectedItem.podId) && (
+                            <span className="text-xs text-[#9CA3AF]">{podNames.get(selectedItem.podId)}</span>
+                          )}
+                        </div>
+                      </div>
+                      {contractValueSek != null && (
+                        <div className="ml-auto text-right flex-shrink-0">
+                          <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Contract value</p>
+                          <p className="text-sm font-bold text-[#0F0F0F]">
+                            {Math.round(contractValueSek / 1000).toLocaleString('sv-SE')} kSEK
+                          </p>
+                        </div>
                       )}
+                      <button
+                        onClick={() => setSelectedId(null)}
+                        className="ml-3 text-[#9CA3AF] hover:text-[#374151] flex-shrink-0"
+                        title="Close"
+                      >
+                        <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
                     </div>
-                    {contractValueSek != null && (
-                      <div className="ml-auto text-right flex-shrink-0">
-                        <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Contract value</p>
-                        <p className="text-sm font-bold text-[#0F0F0F]">
-                          {Math.round(contractValueSek / 1000).toLocaleString('sv-SE')} kSEK
-                        </p>
+
+                    {/* SOW metadata chips */}
+                    {latestSow && (latestSow.parsed_start_date || latestSow.parsed_payment_terms || latestRaw?.invoicing_model) && (
+                      <div className="flex flex-wrap items-center gap-1.5 px-5 pb-4">
+                        {latestSow.parsed_start_date && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
+                            {fmtMonth(latestSow.parsed_start_date)}
+                            {latestSow.parsed_end_date && <> → {fmtMonth(latestSow.parsed_end_date)}</>}
+                          </span>
+                        )}
+                        {latestSow.parsed_payment_terms && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
+                            {latestSow.parsed_payment_terms}
+                          </span>
+                        )}
+                        {latestRaw?.invoicing_model && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#EFF6FF] text-[#1D4ED8]">
+                            {MODEL_LABEL[latestRaw.invoicing_model] ?? latestRaw.invoicing_model}
+                          </span>
+                        )}
+                        {latestRaw?.hourly_rate_sek && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
+                            {Math.round(latestRaw.hourly_rate_sek).toLocaleString('sv-SE')} kr/h
+                          </span>
+                        )}
+                        {latestRaw?.fte_count && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
+                            {latestRaw.fte_count} FTE
+                          </span>
+                        )}
+                        {latestRaw?.monthly_fee_sek && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
+                            {Math.round(latestRaw.monthly_fee_sek / 1000).toLocaleString('sv-SE')} kSEK/mo
+                          </span>
+                        )}
                       </div>
                     )}
-                    <button
-                      onClick={() => setSelectedId(null)}
-                      className="ml-3 text-[#9CA3AF] hover:text-[#374151] flex-shrink-0"
-                      title="Close"
-                    >
-                      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
                   </div>
                 )}
 
