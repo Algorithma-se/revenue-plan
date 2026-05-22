@@ -443,39 +443,40 @@ function InvoicesContent() {
                   </div>
 
                   <div className="p-5">
-                    {drafts.length === 0 && sowDocs.length === 0 ? (
-                      <div className="text-center py-6">
-                        <p className="text-xs text-[#9CA3AF] mb-3">Upload a SOW document to generate an invoice schedule, or add invoices manually.</p>
-                        <button
-                          onClick={() => setShowUpload(true)}
-                          className="px-4 py-2 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
-                        >
-                          Upload SOW
-                        </button>
-                      </div>
-                    ) : drafts.length === 0 && sowDocs.length > 0 ? (
-                      <div className="text-center py-6">
-                        <p className="text-xs text-[#9CA3AF] mb-3">No invoices yet. Generate from the latest SOW or add manually.</p>
-                        <div className="flex justify-center gap-2">
+                    {drafts.length === 0 && (
+                      <div className="flex items-center gap-3 mb-4 p-3 bg-[#F8FAFC] rounded-xl border border-[#E5E7EB]">
+                        <p className="text-xs text-[#6B7280] flex-1">
+                          {sowDocs.length === 0
+                            ? 'No invoices yet. Upload a SOW to auto-generate, or add rows manually below.'
+                            : 'No invoices yet. Generate from the latest SOW or add rows manually below.'}
+                        </p>
+                        <div className="flex gap-2 flex-shrink-0">
                           {latestSow?.parse_status === 'done' && (
                             <button
                               onClick={() => setReviewSow(latestSow)}
-                              className="px-4 py-2 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
+                              className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
                             >
-                              Generate from latest SOW
+                              Generate from SOW
+                            </button>
+                          )}
+                          {sowDocs.length === 0 && (
+                            <button
+                              onClick={() => setShowUpload(true)}
+                              className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
+                            >
+                              Upload SOW
                             </button>
                           )}
                         </div>
                       </div>
-                    ) : (
-                      <InvoiceTable
-                        drafts={drafts}
-                        savedInvoices={invoices}
-                        contractValueSek={contractValueSek}
-                        onChange={setDrafts}
-                        onStatusChange={handleStatusChange}
-                      />
                     )}
+                    <InvoiceTable
+                      drafts={drafts}
+                      savedInvoices={invoices}
+                      contractValueSek={contractValueSek}
+                      onChange={setDrafts}
+                      onStatusChange={handleStatusChange}
+                    />
                   </div>
                 </div>
 

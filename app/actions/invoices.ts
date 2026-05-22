@@ -57,25 +57,26 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
   if (error || !sow) throw new Error('SOW document not found')
   if (sow.parse_status !== 'done') throw new Error('SOW has not been parsed yet')
 
-  const itemId = sow.manual_revenue_item_id
-  const total  = Number(sow.parsed_total_value_sek ?? 0)
-  const start  = sow.parsed_start_date ? new Date(sow.parsed_start_date) : new Date()
-  const end    = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
-  const terms  = (sow.parsed_payment_terms ?? '').toLowerCase()
+  const itemId   = sow.manual_revenue_item_id
+  const total    = Number(sow.parsed_total_value_sek ?? 0)
+  const start    = sow.parsed_start_date ? new Date(sow.parsed_start_date) : new Date()
+  const end      = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
+  const terms    = (sow.parsed_payment_terms ?? '').toLowerCase()
+  const termDays = parsePaymentTermsDays(terms)
   const deliverables: { label: string; due_date: string | null }[] = sow.parsed_deliverables ?? []
-  const year   = start.getFullYear()
+  const year     = start.getFullYear()
 
   const drafts: Omit<Invoice, 'id' | 'created_at' | 'updated_at'>[] = []
 
   if (deliverables.length > 0) {
     deliverables.forEach((d, i) => {
-      const due = d.due_date ? new Date(d.due_date) : addDays(start, 30 * (i + 1))
+      const issueDate = d.due_date ? new Date(d.due_date) : addDays(start, 30 * (i + 1))
       drafts.push({
         manual_revenue_item_id: itemId,
         sow_document_id:        sowId,
         invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
-        issue_date:             toIso(due),
-        due_date:               toIso(due),
+        issue_date:             toIso(issueDate),
+        due_date:               toIso(addDays(issueDate, termDays)),
         amount_sek:             total / deliverables.length,
         payment_trigger:        'milestone',
         milestone_label:        d.label,
@@ -89,13 +90,13 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
     const months = monthsBetween(start, end)
     const perMonth = months > 0 ? total / months : total
     for (let i = 0; i < months; i++) {
-      const due = addMonths(start, i + 1)
+      const issueDate = addMonths(start, i + 1)
       drafts.push({
         manual_revenue_item_id: itemId,
         sow_document_id:        sowId,
         invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
-        issue_date:             toIso(due),
-        due_date:               toIso(due),
+        issue_date:             toIso(issueDate),
+        due_date:               toIso(addDays(issueDate, termDays)),
         amount_sek:             perMonth,
         payment_trigger:        'date',
         milestone_label:        null,
@@ -106,13 +107,12 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
       })
     }
   } else {
-    const due = addDays(start, 30)
     drafts.push({
       manual_revenue_item_id: itemId,
       sow_document_id:        sowId,
       invoice_number:         `${year}-INV-001`,
       issue_date:             toIso(start),
-      due_date:               toIso(due),
+      due_date:               toIso(addDays(start, termDays)),
       amount_sek:             total,
       payment_trigger:        'date',
       milestone_label:        null,
@@ -247,6 +247,12 @@ Reply ONLY with a valid JSON array of suggestions (empty array if no changes nee
 
 function toIso(d: Date): string {
   return d.toISOString().slice(0, 10)
+}
+
+// Parse "Net 30", "30 days", "60 dagar", "net 45 days", etc. → number of days
+function parsePaymentTermsDays(terms: string): number {
+  const match = terms.match(/(\d+)/)
+  return match ? parseInt(match[1], 10) : 30
 }
 
 function addDays(d: Date, n: number): Date {
