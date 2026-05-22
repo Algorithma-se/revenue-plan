@@ -248,6 +248,36 @@ Reply ONLY with a valid JSON array of suggestions (empty array if no changes nee
   return JSON.parse(jsonText) as InvoiceSuggestion[]
 }
 
+export async function getAggregatedCashFlow(): Promise<{
+  planByMonth:     Record<string, number>
+  invoicedByMonth: Record<string, number>
+  expectedByMonth: Record<string, number>
+}> {
+  const supabase = await createServerSupabase()
+  const [{ data: cells }, { data: invs }] = await Promise.all([
+    supabase.from('plan_revenue_cells').select('month, amount'),
+    supabase.from('invoices').select('issue_date, due_date, paid_date, amount_sek, status'),
+  ])
+
+  const planByMonth:     Record<string, number> = {}
+  const invoicedByMonth: Record<string, number> = {}
+  const expectedByMonth: Record<string, number> = {}
+
+  for (const c of (cells ?? [])) {
+    const m = c.month.slice(0, 7) + '-01'
+    planByMonth[m] = (planByMonth[m] ?? 0) + c.amount
+  }
+  for (const inv of (invs ?? [])) {
+    const im = inv.issue_date.slice(0, 7) + '-01'
+    invoicedByMonth[im] = (invoicedByMonth[im] ?? 0) + inv.amount_sek
+    const cashDate = inv.status === 'paid' && inv.paid_date ? inv.paid_date : inv.due_date
+    const em = cashDate.slice(0, 7) + '-01'
+    expectedByMonth[em] = (expectedByMonth[em] ?? 0) + inv.amount_sek
+  }
+
+  return { planByMonth, invoicedByMonth, expectedByMonth }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toIso(d: Date): string {

@@ -6,14 +6,13 @@ import { supabase } from '@/lib/supabase'
 import type {
   SowDocument, Invoice, InvoiceDraft, InvoiceSuggestion, InvoiceStatus,
 } from '@/types/database'
-import { getInvoices, getAllInvoiceItems, saveInvoices } from '@/app/actions/invoices'
+import { getInvoices, getAllInvoiceItems, saveInvoices, getAggregatedCashFlow } from '@/app/actions/invoices'
 import { getSowDocuments, getSowDownloadUrl, deleteSow } from '@/app/actions/sow'
 import { InvoiceTable } from '@/components/sow/InvoiceTable'
 import { SowUploadModal } from '@/components/sow/SowUploadModal'
 import { SowReviewModal } from '@/components/sow/SowReviewModal'
 import { AmendmentSuggestionsModal } from '@/components/sow/AmendmentSuggestionsModal'
 import { SowCashFlowChart } from '@/components/sow/SowCashFlowChart'
-import { getFiscalMonths, currentFyStart } from '@/lib/plan-utils'
 import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
 
 interface SidebarItem {
@@ -31,11 +30,20 @@ const DOC_TYPE_COLOR = {
   change_request: 'bg-[#FEF2F2] text-[#DC2626]',
 }
 const PARSE_STATUS_ICON: Record<string, string> = {
-  done:    '✓',
-  parsing: '…',
-  pending: '·',
-  error:   '!',
+  done: '✓', parsing: '…', pending: '·', error: '!',
 }
+
+function getRollingMonths(): string[] {
+  const months: string[] = []
+  const now = new Date()
+  for (let i = -2; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+    months.push(d.toISOString().slice(0, 10))
+  }
+  return months
+}
+
+const ROLLING_MONTHS = getRollingMonths()
 
 function useOverdueCheck(invoices: Invoice[]) {
   const today = new Date().toISOString().slice(0, 10)
@@ -56,16 +64,21 @@ function InvoicesContent() {
   const [saveMsg, setSaveMsg]           = useState<string | null>(null)
   const [docHistoryOpen, setDocHistoryOpen] = useState(true)
   const [podNames, setPodNames]         = useState<Map<string, string>>(new Map())
+  const [selectedPodId, setSelectedPodId] = useState<string | null>(null)
+  const [aggregateOpen, setAggregateOpen] = useState(true)
+  const [aggData, setAggData]           = useState<{
+    planByMonth: Record<string, number>
+    invoicedByMonth: Record<string, number>
+    expectedByMonth: Record<string, number>
+  } | null>(null)
 
   // Modals
-  const [showUpload, setShowUpload]         = useState(false)
-  const [reviewSow, setReviewSow]           = useState<SowDocument | null>(null)
-  const [suggestions, setSuggestions]       = useState<InvoiceSuggestion[] | null>(null)
+  const [showUpload, setShowUpload]   = useState(false)
+  const [reviewSow, setReviewSow]     = useState<SowDocument | null>(null)
+  const [suggestions, setSuggestions] = useState<InvoiceSuggestion[] | null>(null)
 
   const { invoicesEnabled } = useFeatureFlags()
-  const months = getFiscalMonths(currentFyStart())
 
-  // Load sidebar list
   const loadSidebar = useCallback(async () => {
     const [items, { data: pods }] = await Promise.all([
       getAllInvoiceItems(),
@@ -75,15 +88,21 @@ function InvoicesContent() {
     setPodNames(new Map((pods ?? []).map((p: { id: string; name: string }) => [p.id, p.name])))
   }, [])
 
-  useEffect(() => { loadSidebar() }, [loadSidebar])
+  const loadAggregate = useCallback(async () => {
+    const data = await getAggregatedCashFlow()
+    setAggData(data)
+  }, [])
 
-  // Sync URL param to selectedId
+  useEffect(() => {
+    loadSidebar()
+    loadAggregate()
+  }, [loadSidebar, loadAggregate])
+
   useEffect(() => {
     const itemFromUrl = searchParams.get('item')
     if (itemFromUrl) setSelectedId(itemFromUrl)
   }, [searchParams])
 
-  // Load detail when selection changes
   useEffect(() => {
     if (!selectedId) return
     router.replace(`/invoices?item=${selectedId}`, { scroll: false })
@@ -98,7 +117,6 @@ function InvoicesContent() {
     }).finally(() => setLoadingMain(false))
   }, [selectedId, router])
 
-  // Plan cells for cash flow chart
   const [planCells, setPlanCells] = useState<Record<string, number>>({})
   useEffect(() => {
     if (!selectedId) return
@@ -140,8 +158,8 @@ function InvoicesContent() {
       setDrafts(invoicesToDrafts(saved))
       setSaveMsg('Saved')
       setTimeout(() => setSaveMsg(null), 2000)
-      // Refresh sidebar counts
       loadSidebar()
+      loadAggregate()
     } catch (e) {
       setSaveMsg(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -184,6 +202,7 @@ function InvoicesContent() {
       return merged
     })
     setReviewSow(null)
+    loadAggregate()
   }
 
   function handleSuggestions(sug: InvoiceSuggestion[]) {
@@ -210,16 +229,19 @@ function InvoicesContent() {
 
   const latestSow = sowDocs[sowDocs.length - 1] ?? null
   const contractValueSek = latestSow?.parsed_total_value_sek != null
-    ? Number(latestSow.parsed_total_value_sek)
-    : null
+    ? Number(latestSow.parsed_total_value_sek) : null
 
-  // Group sidebar items by pod
-  const byPod = new Map<string | null, SidebarItem[]>()
-  for (const item of sidebarItems) {
-    const key = item.podId
-    if (!byPod.has(key)) byPod.set(key, [])
-    byPod.get(key)!.push(item)
-  }
+  // Unique pods that have items
+  const pods = Array.from(new Set(sidebarItems.map(i => i.podId)))
+    .map(id => ({ id, name: id ? (podNames.get(id) ?? id) : 'No pod' }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  // Filtered items for the client dropdown
+  const filteredItems = selectedPodId
+    ? sidebarItems.filter(i => i.podId === selectedPodId)
+    : sidebarItems
+
+  const selectedItem = sidebarItems.find(i => i.itemId === selectedId) ?? null
 
   if (!invoicesEnabled) {
     return (
@@ -235,107 +257,141 @@ function InvoicesContent() {
 
   return (
     <div className="min-h-screen bg-[#F9F9F8]">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
 
-        {/* Title */}
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-[#0F0F0F] tracking-tight">Invoices</h1>
-          <p className="text-xs text-[#9CA3AF] mt-0.5">SOW documents and invoice schedules</p>
+        {/* ── Title + filter bar ──────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="mr-2">
+            <h1 className="text-xl font-bold text-[#0F0F0F] tracking-tight">Invoices</h1>
+          </div>
+
+          {/* Pod filter chips */}
+          {pods.length > 1 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => { setSelectedPodId(null) }}
+                className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${
+                  selectedPodId === null
+                    ? 'bg-[#0F0F0F] text-white border-[#0F0F0F]'
+                    : 'border-[#E5E7EB] text-[#374151] hover:border-[#9CA3AF]'
+                }`}
+              >
+                All pods
+              </button>
+              {pods.map(p => (
+                <button
+                  key={p.id ?? 'none'}
+                  onClick={() => setSelectedPodId(p.id)}
+                  className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${
+                    selectedPodId === p.id
+                      ? 'bg-[#0F0F0F] text-white border-[#0F0F0F]'
+                      : 'border-[#E5E7EB] text-[#374151] hover:border-[#9CA3AF]'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Client selector */}
+          <div className="ml-auto">
+            <select
+              value={selectedId ?? ''}
+              onChange={e => setSelectedId(e.target.value || null)}
+              className="text-sm border border-[#E5E7EB] rounded-xl px-3 py-1.5 bg-white text-[#0F0F0F] focus:outline-none focus:border-[#61b5cc] transition-colors min-w-[200px]"
+            >
+              <option value="">— Select client —</option>
+              {filteredItems.map(item => (
+                <option key={item.itemId} value={item.itemId}>
+                  {item.clientName ?? '(no name)'}
+                  {item.hasSow ? ' ·SOW' : ''}
+                  {item.invoiceCount > 0 ? ` · ${item.invoiceCount} inv` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="flex gap-5 items-start">
-
-          {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-          <div className="w-56 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
-              <div className="px-4 py-2.5 bg-[#F8FAFC] border-b border-[#E5E7EB]">
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Clients</span>
-              </div>
-
-              {sidebarItems.length === 0 ? (
-                <div className="px-4 py-6 text-center">
-                  <p className="text-xs text-[#9CA3AF]">No revenue items yet.</p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">Add items in the P&L Plan first.</p>
-                </div>
+        {/* ── Aggregate cash flow (R12, collapsible) ──────────────────────── */}
+        <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+          <button
+            onClick={() => setAggregateOpen(o => !o)}
+            className="w-full flex items-center justify-between px-5 py-3 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+          >
+            <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">
+              Total cash flow — all clients (R12)
+            </span>
+            <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-[#9CA3AF] transition-transform ${aggregateOpen ? '' : '-rotate-90'}`}>
+              <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z" clipRule="evenodd" />
+            </svg>
+          </button>
+          {aggregateOpen && (
+            <div className="p-5">
+              {aggData ? (
+                <SowCashFlowChart
+                  planCells={aggData.planByMonth}
+                  invoicedByMonth={aggData.invoicedByMonth}
+                  expectedByMonth={aggData.expectedByMonth}
+                  months={ROLLING_MONTHS}
+                />
               ) : (
-                <div className="divide-y divide-[#F3F4F6]">
-                  {sidebarItems.map(item => (
-                    <button
-                      key={item.itemId}
-                      onClick={() => setSelectedId(item.itemId)}
-                      className={`w-full text-left px-4 py-2.5 transition-colors ${
-                        selectedId === item.itemId
-                          ? 'bg-[#EFF9FF] border-l-2 border-[#61b5cc]'
-                          : 'hover:bg-[#F9FAFB] border-l-2 border-transparent'
-                      }`}
-                    >
-                      <p className="text-xs font-medium text-[#0F0F0F] truncate">{item.clientName ?? '(no name)'}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {item.podId && (
-                          <span className="text-[10px] text-[#9CA3AF] truncate">{podNames.get(item.podId) ?? ''}</span>
-                        )}
-                        <span className="text-[10px] text-[#9CA3AF] ml-auto">{item.invoiceCount} inv</span>
-                        {item.hasSow && (
-                          <span className="text-[10px] text-[#61b5cc]">SOW</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                <div className="h-[200px] flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-[#61b5cc] border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* ── Main panel ──────────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-5">
-
-            {!selectedId ? (
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-12 text-center shadow-sm">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-10 h-10 mx-auto text-[#D1D5DB] mb-3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-                <p className="text-sm text-[#6B7280]">Select a client from the sidebar to view or create invoices.</p>
-              </div>
-            ) : loadingMain ? (
+        {/* ── Client detail panel ─────────────────────────────────────────── */}
+        {selectedId && (
+          <div className="space-y-5">
+            {loadingMain ? (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 shadow-sm">
                 <div className="space-y-3">
                   {[80, 60, 90, 50].map((w, i) => (
-                    <div key={i} className={`h-4 bg-[#F3F4F6] rounded animate-pulse`} style={{ width: `${w}%` }} />
+                    <div key={i} className="h-4 bg-[#F3F4F6] rounded animate-pulse" style={{ width: `${w}%` }} />
                   ))}
                 </div>
               </div>
             ) : (
               <>
                 {/* Client header */}
-                {(() => {
-                  const selected = sidebarItems.find(i => i.itemId === selectedId)
-                  if (!selected) return null
-                  return (
-                    <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
-                      <div className="w-9 h-9 rounded-xl bg-[#0F0F0F] flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-bold text-white">
-                          {(selected.clientName ?? '?')[0].toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="min-w-0">
-                        <h2 className="text-base font-bold text-[#0F0F0F] truncate">
-                          {selected.clientName ?? '(no name)'}
-                        </h2>
-                        {selected.podId && podNames.get(selected.podId) && (
-                          <p className="text-xs text-[#9CA3AF]">{podNames.get(selected.podId)}</p>
-                        )}
-                      </div>
-                      {contractValueSek != null && (
-                        <div className="ml-auto text-right flex-shrink-0">
-                          <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Contract value</p>
-                          <p className="text-sm font-bold text-[#0F0F0F]">
-                            {Math.round(contractValueSek / 1000).toLocaleString('sv-SE')} kSEK
-                          </p>
-                        </div>
+                {selectedItem && (
+                  <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
+                    <div className="w-9 h-9 rounded-xl bg-[#0F0F0F] flex items-center justify-center flex-shrink-0">
+                      <span className="text-sm font-bold text-white">
+                        {(selectedItem.clientName ?? '?')[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-base font-bold text-[#0F0F0F] truncate">
+                        {selectedItem.clientName ?? '(no name)'}
+                      </h2>
+                      {selectedItem.podId && podNames.get(selectedItem.podId) && (
+                        <p className="text-xs text-[#9CA3AF]">{podNames.get(selectedItem.podId)}</p>
                       )}
                     </div>
-                  )
-                })()}
+                    {contractValueSek != null && (
+                      <div className="ml-auto text-right flex-shrink-0">
+                        <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Contract value</p>
+                        <p className="text-sm font-bold text-[#0F0F0F]">
+                          {Math.round(contractValueSek / 1000).toLocaleString('sv-SE')} kSEK
+                        </p>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setSelectedId(null)}
+                      className="ml-3 text-[#9CA3AF] hover:text-[#374151] flex-shrink-0"
+                      title="Close"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
 
                 {/* Overdue alert */}
                 {overdueInvoices.length > 0 && (
@@ -353,11 +409,10 @@ function InvoicesContent() {
                     className="w-full flex items-center justify-between px-5 py-3 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
                   >
                     <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Document history ({sowDocs.length})</span>
-                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-[#9CA3AF] transition-transform ${docHistoryOpen ? 'rotate-0' : '-rotate-90'}`}>
+                    <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-[#9CA3AF] transition-transform ${docHistoryOpen ? '' : '-rotate-90'}`}>
                       <path fillRule="evenodd" d="M1.646 4.646a.5.5 0 01.708 0L8 10.293l5.646-5.647a.5.5 0 01.708.708l-6 6a.5.5 0 01-.708 0l-6-6a.5.5 0 010-.708z" clipRule="evenodd" />
                     </svg>
                   </button>
-
                   {docHistoryOpen && (
                     <div className="p-5">
                       {sowDocs.length === 0 ? (
@@ -383,28 +438,15 @@ function InvoicesContent() {
                                 </p>
                               </div>
                               {doc.parse_status === 'done' && (
-                                <button
-                                  onClick={() => setReviewSow(doc)}
-                                  className="text-[10px] text-[#61b5cc] hover:underline flex-shrink-0"
-                                >
-                                  Review
-                                </button>
+                                <button onClick={() => setReviewSow(doc)} className="text-[10px] text-[#61b5cc] hover:underline flex-shrink-0">Review</button>
                               )}
-                              <button
-                                onClick={() => handleDownload(doc.storage_path)}
-                                className="text-[#9CA3AF] hover:text-[#0F0F0F] flex-shrink-0"
-                                title="Download"
-                              >
+                              <button onClick={() => handleDownload(doc.storage_path)} className="text-[#9CA3AF] hover:text-[#0F0F0F] flex-shrink-0" title="Download">
                                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                                   <path d="M.5 9.9a.5.5 0 01.5.5v2.5a1 1 0 001 1h12a1 1 0 001-1v-2.5a.5.5 0 011 0v2.5a2 2 0 01-2 2H2a2 2 0 01-2-2v-2.5a.5.5 0 01.5-.5z" />
                                   <path d="M7.646 11.854a.5.5 0 00.708 0l3-3a.5.5 0 00-.708-.708L8.5 10.293V1.5a.5.5 0 00-1 0v8.793L5.354 8.146a.5.5 0 10-.708.708l3 3z" />
                                 </svg>
                               </button>
-                              <button
-                                onClick={() => handleDeleteSow(doc.id)}
-                                className="text-[#D1D5DB] hover:text-[#DC2626] flex-shrink-0"
-                                title="Delete document"
-                              >
+                              <button onClick={() => handleDeleteSow(doc.id)} className="text-[#D1D5DB] hover:text-[#DC2626] flex-shrink-0" title="Delete">
                                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                                   <path d="M5.5 5.5A.5.5 0 016 6v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5zm5 0a.5.5 0 01.5.5v6a.5.5 0 01-1 0V6a.5.5 0 01.5-.5z" />
                                   <path fillRule="evenodd" d="M14.5 3a1 1 0 01-1 1H13v9a2 2 0 01-2 2H5a2 2 0 01-2-2V4h-.5a1 1 0 01-1-1V2a1 1 0 011-1H6a1 1 0 011-1h2a1 1 0 011 1h3.5a1 1 0 011 1v1zM4.118 4L4 4.059V13a1 1 0 001 1h6a1 1 0 001-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z" clipRule="evenodd" />
@@ -414,10 +456,7 @@ function InvoicesContent() {
                           ))}
                         </div>
                       )}
-                      <button
-                        onClick={() => setShowUpload(true)}
-                        className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#0F0F0F] transition-colors"
-                      >
+                      <button onClick={() => setShowUpload(true)} className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#0F0F0F] transition-colors">
                         <span className="text-sm font-light">+</span> Upload new document
                       </button>
                     </div>
@@ -441,7 +480,6 @@ function InvoicesContent() {
                       </button>
                     </div>
                   </div>
-
                   <div className="p-5">
                     {drafts.length === 0 && (
                       <div className="flex items-center gap-3 mb-4 p-3 bg-[#F8FAFC] rounded-xl border border-[#E5E7EB]">
@@ -452,18 +490,12 @@ function InvoicesContent() {
                         </p>
                         <div className="flex gap-2 flex-shrink-0">
                           {latestSow?.parse_status === 'done' && (
-                            <button
-                              onClick={() => setReviewSow(latestSow)}
-                              className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
-                            >
+                            <button onClick={() => setReviewSow(latestSow)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
                               Generate from SOW
                             </button>
                           )}
                           {sowDocs.length === 0 && (
-                            <button
-                              onClick={() => setShowUpload(true)}
-                              className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors"
-                            >
+                            <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
                               Upload SOW
                             </button>
                           )}
@@ -480,28 +512,32 @@ function InvoicesContent() {
                   </div>
                 </div>
 
-                {/* Cash flow chart */}
+                {/* Per-client cash flow chart */}
                 {(Object.keys(planCells).length > 0 || invoices.length > 0) && (
                   <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
-                    <SowCashFlowChart planCells={planCells} invoices={invoices} months={months} />
+                    <SowCashFlowChart
+                      planCells={planCells}
+                      invoices={invoices}
+                      months={ROLLING_MONTHS}
+                      title={`Cash flow — ${selectedItem?.clientName ?? ''}`}
+                    />
                   </div>
                 )}
               </>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modals */}
       {showUpload && selectedId && (
         <SowUploadModal
           itemId={selectedId}
-          clientName={sidebarItems.find(i => i.itemId === selectedId)?.clientName ?? null}
+          clientName={selectedItem?.clientName ?? null}
           onDone={handleParsed}
           onClose={() => setShowUpload(false)}
         />
       )}
-
       {reviewSow && (
         <SowReviewModal
           sow={reviewSow}
@@ -511,7 +547,6 @@ function InvoicesContent() {
           onClose={() => setReviewSow(null)}
         />
       )}
-
       {suggestions !== null && (
         <AmendmentSuggestionsModal
           suggestions={suggestions}
