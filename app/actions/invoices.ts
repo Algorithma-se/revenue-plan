@@ -63,10 +63,14 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
   const itemId       = sow.manual_revenue_item_id
   const raw          = sow.parsed_raw as SowParsedRaw | null
   const total        = Number(sow.parsed_total_value_sek ?? 0)
-  const start        = sow.parsed_start_date ? new Date(sow.parsed_start_date) : new Date()
-  const end          = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
+  const start        = sow.parsed_start_date ? new Date(sow.parsed_start_date + 'T12:00:00') : new Date()
+  const end          = sow.parsed_end_date   ? new Date(sow.parsed_end_date   + 'T12:00:00') : null
   const termDays     = parsePaymentTermsDays((sow.parsed_payment_terms ?? '').toLowerCase())
-  const deliverables = (sow.parsed_deliverables ?? []) as SowDeliverable[]
+  // Align deliverable dates to the contract start: if the earliest date
+  // predates start (e.g. user corrected start date in the review modal),
+  // shift all dates forward by the same delta so the schedule is consistent.
+  const rawDeliverables = (sow.parsed_deliverables ?? []) as SowDeliverable[]
+  const deliverables    = alignDeliverablesToStart(rawDeliverables, start)
   const model        = raw?.invoicing_model ?? null
   const hourlyRate   = raw?.hourly_rate_sek ?? null
   const monthlyFee   = raw?.monthly_fee_sek ?? null
@@ -428,4 +432,29 @@ function monthsBetween(a: Date, b: Date): number {
     1,
     (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()),
   )
+}
+
+function shiftIso(iso: string, deltaMs: number): string {
+  return toIso(new Date(new Date(iso + 'T12:00:00').getTime() + deltaMs))
+}
+
+// If the earliest deliverable date predates the contract start (e.g. because
+// the user corrected the start date in the review modal), shift all dates
+// forward so the schedule aligns with the stated start.
+function alignDeliverablesToStart(deliverables: SowDeliverable[], start: Date): SowDeliverable[] {
+  const allDates = deliverables.flatMap(d =>
+    [d.invoice_date, d.due_date].filter((x): x is string => !!x)
+  )
+  if (allDates.length === 0) return deliverables
+
+  const minMs   = Math.min(...allDates.map(iso => new Date(iso + 'T12:00:00').getTime()))
+  const startMs = start.getTime()
+  if (minMs >= startMs) return deliverables   // already aligned
+
+  const deltaMs = startMs - minMs
+  return deliverables.map(d => ({
+    ...d,
+    invoice_date: d.invoice_date ? shiftIso(d.invoice_date, deltaMs) : d.invoice_date,
+    due_date:     d.due_date     ? shiftIso(d.due_date,     deltaMs) : d.due_date,
+  }))
 }
