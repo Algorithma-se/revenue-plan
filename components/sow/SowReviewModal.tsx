@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { SowDocument, SowDeliverable } from '@/types/database'
+import type { SowDocument, SowDeliverable, SowParsedRaw } from '@/types/database'
 import { generateInvoiceSchedule, suggestAmendments } from '@/app/actions/invoices'
 import type { Invoice, InvoiceSuggestion } from '@/types/database'
 
@@ -45,6 +45,13 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
   }
 
   const totalKSEK = sow.parsed_total_value_sek ? Math.round(sow.parsed_total_value_sek / 1000) : null
+  const raw = sow.parsed_raw as SowParsedRaw | null
+  const MODEL_LABEL: Record<string, string> = {
+    milestone: 'Milestone',
+    time_and_materials: 'Time & materials',
+    capacity: 'Capacity / retainer',
+    fixed_fee: 'Fixed fee',
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -69,6 +76,22 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
             <Field label="Start date" value={sow.parsed_start_date ?? '—'} />
             <Field label="End date"   value={sow.parsed_end_date   ?? '—'} />
           </div>
+
+          {raw?.invoicing_model && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-[#F0F9FF] border border-[#BAE6FD] rounded-xl">
+              <span className="text-[10px] font-bold text-[#0369A1] uppercase tracking-wider">Invoicing model</span>
+              <span className="text-xs font-semibold text-[#0F0F0F]">{MODEL_LABEL[raw.invoicing_model] ?? raw.invoicing_model}</span>
+              {raw.hourly_rate_sek && (
+                <span className="ml-auto text-xs text-[#6B7280]">{Math.round(raw.hourly_rate_sek).toLocaleString('sv-SE')} kr/h</span>
+              )}
+              {raw.monthly_fee_sek && (
+                <span className="ml-auto text-xs text-[#6B7280]">{Math.round(raw.monthly_fee_sek / 1000)} kSEK/month</span>
+              )}
+              {raw.fte_count && (
+                <span className="ml-auto text-xs text-[#6B7280]">{raw.fte_count} FTE</span>
+              )}
+            </div>
+          )}
 
           {sow.parsed_payment_terms && (
             <Field label="Payment terms" value={sow.parsed_payment_terms} />

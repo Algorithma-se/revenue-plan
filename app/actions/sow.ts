@@ -206,7 +206,7 @@ Use null for any field that cannot be determined.`
   }
 }
 
-export async function deleteSow(sowId: string): Promise<void> {
+export async function deleteSow(sowId: string, deleteInvoices = false): Promise<void> {
   const admin = createAdminSupabase()
 
   const { data: sow } = await admin
@@ -214,6 +214,10 @@ export async function deleteSow(sowId: string): Promise<void> {
     .select('storage_path')
     .eq('id', sowId)
     .single()
+
+  if (deleteInvoices) {
+    await admin.from('invoices').delete().eq('sow_document_id', sowId)
+  }
 
   if (sow?.storage_path) {
     await admin.storage.from('sow-documents').remove([sow.storage_path])

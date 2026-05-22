@@ -180,10 +180,22 @@ function InvoicesContent() {
   }
 
   async function handleDeleteSow(sowId: string) {
-    if (!confirm('Delete this SOW document? The invoices will NOT be deleted.')) return
-    await deleteSow(sowId)
+    const linked = invoices.filter(i => i.sow_document_id === sowId)
+    const msg = linked.length > 0
+      ? `Delete this SOW and the ${linked.length} invoice${linked.length > 1 ? 's' : ''} generated from it?`
+      : 'Delete this SOW document?'
+    if (!confirm(msg)) return
+
+    const alsoInvoices = linked.length > 0
+    await deleteSow(sowId, alsoInvoices)
     setSowDocs(ds => ds.filter(d => d.id !== sowId))
+    if (alsoInvoices) {
+      const remaining = invoices.filter(i => i.sow_document_id !== sowId)
+      setInvoices(remaining)
+      setDrafts(invoicesToDrafts(remaining))
+    }
     loadSidebar()
+    loadAggregate()
   }
 
   async function handleDownload(storagePath: string) {
