@@ -299,7 +299,7 @@ Reply ONLY with a valid JSON array of suggestions (empty array if no changes nee
   const client  = new Anthropic({ apiKey })
   const message = await client.messages.create({
     model:      'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
+    max_tokens: 4096,
     messages:   [{ role: 'user', content: prompt }],
   })
 
@@ -307,6 +307,7 @@ Reply ONLY with a valid JSON array of suggestions (empty array if no changes nee
   if (block.type !== 'text') return { error: 'Unexpected response from Claude' }
 
   const jsonText = block.text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
+  if (!jsonText) return { data: [] }
   return { data: JSON.parse(jsonText) as InvoiceSuggestion[] }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Failed to suggest amendments' }
