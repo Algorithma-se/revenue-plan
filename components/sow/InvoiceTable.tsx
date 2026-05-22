@@ -1,31 +1,36 @@
 'use client'
 
-import type { InvoiceDraft, Invoice, PaymentTrigger, InvoiceStatus } from '@/types/database'
+import type { InvoiceDraft, Invoice, InvoiceStatus } from '@/types/database'
 import { InvoiceStatusBadge } from './InvoiceStatusBadge'
 
 interface Props {
-  drafts:        InvoiceDraft[]
-  savedInvoices: Invoice[]
+  drafts:           InvoiceDraft[]
+  savedInvoices:    Invoice[]
   contractValueSek: number | null
-  onChange:      (drafts: InvoiceDraft[]) => void
-  onStatusChange:(invoiceId: string, status: InvoiceStatus, paidDate: string | null) => void
+  onChange:         (drafts: InvoiceDraft[]) => void
+  onStatusChange:   (invoiceId: string, status: InvoiceStatus, paidDate: string | null) => void
 }
 
 export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange, onStatusChange }: Props) {
   const idMap = new Map(savedInvoices.map(i => [i.invoice_number, i]))
 
   function update(idx: number, patch: Partial<InvoiceDraft>) {
-    onChange(drafts.map((d, i) => i === idx ? { ...d, ...patch } : d))
+    const fullPatch = { ...patch }
+    // Auto-derive payment_trigger from milestone_label presence
+    if ('milestone_label' in patch) {
+      fullPatch.payment_trigger = patch.milestone_label ? 'milestone' : 'date'
+    }
+    onChange(drafts.map((d, i) => i === idx ? { ...d, ...fullPatch } : d))
   }
 
   function addRow() {
     const year = new Date().getFullYear()
     const num  = String(drafts.length + 1).padStart(3, '0')
     onChange([...drafts, {
-      invoice_number: `${year}-INV-${num}`,
-      issue_date:     '',
-      due_date:       '',
-      amount_sek:     0,
+      invoice_number:  `${year}-INV-${num}`,
+      issue_date:      '',
+      due_date:        '',
+      amount_sek:      0,
       payment_trigger: 'date',
       milestone_label: '',
       status:          'draft',
@@ -40,21 +45,33 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
   const total = drafts.reduce((s, d) => s + (d.amount_sek || 0), 0)
   const diff  = contractValueSek != null ? total - contractValueSek : null
 
+  const cellCls = 'px-2 py-1.5'
+  const inputCls = 'w-full text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white'
+
   return (
     <div>
-      <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
-        <table className="w-full text-xs">
+      <div className="rounded-xl border border-[#E5E7EB]">
+        <table className="w-full table-fixed text-xs">
+          <colgroup>
+            <col className="w-[13%]" /> {/* # */}
+            <col className="w-[12%]" /> {/* Issue date */}
+            <col className="w-[12%]" /> {/* Due date */}
+            <col className="w-[10%]" /> {/* Amount */}
+            <col className="w-[20%]" /> {/* Milestone */}
+            <col className="w-[11%]" /> {/* Status */}
+            <col className="w-[19%]" /> {/* Notes */}
+            <col className="w-[3%]"  /> {/* Delete */}
+          </colgroup>
           <thead>
             <tr className="bg-[#F8FAFC] border-b border-[#E5E7EB]">
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">#</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Issue date</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Due date</th>
-              <th className="px-3 py-2 text-right font-semibold text-[#64748B]">Amount kSEK</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Trigger</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Milestone</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Status</th>
-              <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Notes</th>
-              <th className="px-2 py-2" />
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">#</th>
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Issue date</th>
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Due date</th>
+              <th className="px-2 py-2 text-right font-semibold text-[#64748B]">kSEK</th>
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Milestone</th>
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Status</th>
+              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Notes</th>
+              <th className="px-1 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -62,59 +79,47 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
               const saved = idMap.get(d.invoice_number)
               return (
                 <tr key={i} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#F9FAFB]">
-                  <td className="px-3 py-1.5">
+                  <td className={cellCls}>
                     <input
                       value={d.invoice_number}
                       onChange={e => update(i, { invoice_number: e.target.value })}
-                      className="w-28 text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white"
+                      className={inputCls}
                     />
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className={cellCls}>
                     <input
                       type="date"
                       value={d.issue_date}
                       onChange={e => update(i, { issue_date: e.target.value })}
-                      className="text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white"
+                      className={inputCls}
                     />
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className={cellCls}>
                     <input
                       type="date"
                       value={d.due_date}
                       onChange={e => update(i, { due_date: e.target.value })}
-                      className="text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white"
+                      className={inputCls}
                     />
                   </td>
-                  <td className="px-3 py-1.5 text-right">
+                  <td className={`${cellCls} text-right`}>
                     <input
                       type="number"
                       value={d.amount_sek ? Math.round(d.amount_sek / 1000) : ''}
                       onChange={e => update(i, { amount_sek: Number(e.target.value) * 1000 })}
-                      className="w-20 text-right text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white"
+                      className={`${inputCls} text-right`}
                       placeholder="0"
                     />
                   </td>
-                  <td className="px-3 py-1.5">
-                    <select
-                      value={d.payment_trigger}
-                      onChange={e => update(i, { payment_trigger: e.target.value as PaymentTrigger })}
-                      className="text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white"
-                    >
-                      <option value="date">Date</option>
-                      <option value="milestone">Milestone</option>
-                    </select>
+                  <td className={cellCls}>
+                    <input
+                      value={d.milestone_label}
+                      onChange={e => update(i, { milestone_label: e.target.value })}
+                      placeholder="Milestone label (optional)"
+                      className={inputCls}
+                    />
                   </td>
-                  <td className="px-3 py-1.5">
-                    {d.payment_trigger === 'milestone' && (
-                      <input
-                        value={d.milestone_label}
-                        onChange={e => update(i, { milestone_label: e.target.value })}
-                        placeholder="Milestone label"
-                        className="text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white w-32"
-                      />
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5">
+                  <td className={cellCls}>
                     {saved ? (
                       <InvoiceStatusBadge
                         invoiceId={saved.id}
@@ -129,15 +134,15 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
                       <span className="text-[#9CA3AF] italic">Save first</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className={cellCls}>
                     <input
                       value={d.notes}
                       onChange={e => update(i, { notes: e.target.value })}
-                      placeholder="Optional notes"
-                      className="text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white w-36"
+                      placeholder="Notes"
+                      className={inputCls}
                     />
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-1 py-1.5">
                     <button
                       onClick={() => removeRow(i)}
                       className="text-[#D1D5DB] hover:text-[#DC2626] transition-colors"

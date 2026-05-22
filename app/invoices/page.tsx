@@ -39,7 +39,9 @@ function getRollingMonths(): string[] {
   const now = new Date()
   for (let i = -12; i <= 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
-    months.push(d.toISOString().slice(0, 10))
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    months.push(`${y}-${m}-01`)
   }
   return months
 }
