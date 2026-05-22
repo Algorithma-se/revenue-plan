@@ -11,6 +11,7 @@ import { ClientBadge } from './ClientBadge'
 import { ItemModal } from '@/components/ItemModal'
 import type { ItemModalSaveData } from '@/components/ItemModal'
 import { SowIcon } from '@/components/sow/SowIcon'
+import { SowUploadModal } from '@/components/sow/SowUploadModal'
 import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
 
 function colStyle(n: number) {
@@ -146,6 +147,7 @@ export function PodSection({
   const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
   const [addingCost, setAddingCost]               = useState(false)
   const [editingCostRow, setEditingCostRow]       = useState<CostRow | null>(null)
+  const [uploadingForItemId, setUploadingForItemId] = useState<string | null>(null)
 
   const curMonth    = currentMonthStr()
   const curMonthIdx = months.indexOf(curMonth)
@@ -227,7 +229,7 @@ export function PodSection({
                     {invoicesEnabled && (
                       <SowIcon
                         hasSow={sowDocItemIds.has(row.id)}
-                        onClick={() => router.push(`/invoices?item=${row.id}`)}
+                        onClick={() => setUploadingForItemId(row.id)}
                       />
                     )}
                   </div>
@@ -410,7 +412,7 @@ export function PodSection({
                           <ClientBadge trend={clientTrends.get(row.client_name ?? '') ?? null} />
                           <SowIcon
                             hasSow={sowDocItemIds.has(row.id)}
-                            onClick={() => router.push(`/invoices?item=${row.id}`)}
+                            onClick={() => setUploadingForItemId(row.id)}
                           />
                         </div>
                         {row.project && <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>}
@@ -541,6 +543,18 @@ export function PodSection({
             await onDeleteCost(editingCostRow.id)
             setEditingCostRow(null)
           }}
+        />
+      )}
+
+      {uploadingForItemId && (
+        <SowUploadModal
+          itemId={uploadingForItemId}
+          onDone={() => {
+            const id = uploadingForItemId
+            setUploadingForItemId(null)
+            router.push(`/invoices?item=${id}`)
+          }}
+          onClose={() => setUploadingForItemId(null)}
         />
       )}
     </>

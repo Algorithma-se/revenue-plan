@@ -36,10 +36,21 @@ export function SowUploadModal({ itemId, onDone, onClose }: Props) {
       fd.append('manual_revenue_item_id', itemId)
       fd.append('document_type', docType)
 
-      const sow = await uploadSow(fd)
+      const uploadResult = await uploadSow(fd)
+      if (uploadResult.error || !uploadResult.data) {
+        setError(uploadResult.error ?? 'Upload failed')
+        setPhase('error')
+        return
+      }
+
       setPhase('parsing')
-      const parsed = await parseSow(sow.id)
-      onDone(parsed)
+      const parseResult = await parseSow(uploadResult.data.id)
+      if (parseResult.error || !parseResult.data) {
+        setError(parseResult.error ?? 'Parse failed')
+        setPhase('error')
+        return
+      }
+      onDone(parseResult.data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
       setPhase('error')

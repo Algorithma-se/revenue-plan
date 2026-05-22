@@ -11,58 +11,61 @@ const ALLOWED_MIME = [
 ]
 const MAX_BYTES = 20 * 1024 * 1024 // 20 MB
 
-export async function uploadSow(formData: FormData): Promise<SowDocument> {
-  const file           = formData.get('file') as File
-  const itemId         = formData.get('manual_revenue_item_id') as string
-  const documentType   = (formData.get('document_type') as SowDocumentType) ?? 'original'
+export async function uploadSow(formData: FormData): Promise<{ data?: SowDocument; error?: string }> {
+  try {
+    const file           = formData.get('file') as File
+    const itemId         = formData.get('manual_revenue_item_id') as string
+    const documentType   = (formData.get('document_type') as SowDocumentType) ?? 'original'
 
-  if (!file || !itemId) throw new Error('Missing file or item id')
-  if (!ALLOWED_MIME.includes(file.type)) throw new Error('Only PDF and DOCX files are supported')
-  if (file.size > MAX_BYTES) throw new Error('File must be smaller than 20 MB')
+    if (!file || !itemId) return { error: 'Missing file or item id' }
+    if (!ALLOWED_MIME.includes(file.type)) return { error: 'Only PDF and DOCX files are supported' }
+    if (file.size > MAX_BYTES) return { error: 'File must be smaller than 20 MB' }
 
-  const admin = createAdminSupabase()
+    const admin = createAdminSupabase()
 
-  // Determine next version number
-  const { data: existing } = await admin
-    .from('sow_documents')
-    .select('version_number')
-    .eq('manual_revenue_item_id', itemId)
-    .order('version_number', { ascending: false })
-    .limit(1)
+    const { data: existing } = await admin
+      .from('sow_documents')
+      .select('version_number')
+      .eq('manual_revenue_item_id', itemId)
+      .order('version_number', { ascending: false })
+      .limit(1)
 
-  const versionNumber = existing && existing.length > 0 ? existing[0].version_number + 1 : 1
+    const versionNumber = existing && existing.length > 0 ? existing[0].version_number + 1 : 1
 
-  const bytes        = Buffer.from(await file.arrayBuffer())
-  const storagePath  = `${itemId}/${Date.now()}-${file.name}`
+    const bytes       = Buffer.from(await file.arrayBuffer())
+    const storagePath = `${itemId}/${Date.now()}-${file.name}`
 
-  const { error: uploadError } = await admin.storage
-    .from('sow-documents')
-    .upload(storagePath, bytes, { contentType: file.type, upsert: false })
+    const { error: uploadError } = await admin.storage
+      .from('sow-documents')
+      .upload(storagePath, bytes, { contentType: file.type, upsert: false })
 
-  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
+    if (uploadError) return { error: `Storage upload failed: ${uploadError.message}` }
 
-  const { data, error } = await admin
-    .from('sow_documents')
-    .insert({
-      manual_revenue_item_id: itemId,
-      document_type:          documentType,
-      version_number:         versionNumber,
-      file_name:              file.name,
-      file_type:              file.type,
-      storage_path:           storagePath,
-      file_size_bytes:        file.size,
-      parse_status:           'pending',
-    })
-    .select()
-    .single()
+    const { data, error } = await admin
+      .from('sow_documents')
+      .insert({
+        manual_revenue_item_id: itemId,
+        document_type:          documentType,
+        version_number:         versionNumber,
+        file_name:              file.name,
+        file_type:              file.type,
+        storage_path:           storagePath,
+        file_size_bytes:        file.size,
+        parse_status:           'pending',
+      })
+      .select()
+      .single()
 
-  if (error) throw new Error(`DB insert failed: ${error.message}`)
-  return data as SowDocument
+    if (error) return { error: `DB insert failed: ${error.message}` }
+    return { data: data as SowDocument }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Upload failed' }
+  }
 }
 
-export async function parseSow(sowId: string): Promise<SowDocument> {
+export async function parseSow(sowId: string): Promise<{ data?: SowDocument; error?: string }> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 
   const admin = createAdminSupabase()
 
@@ -73,7 +76,7 @@ export async function parseSow(sowId: string): Promise<SowDocument> {
     .select()
     .single()
 
-  if (fetchErr || !sow) throw new Error('SOW document not found')
+  if (fetchErr || !sow) return { error: 'SOW document not found' }
 
   try {
     const { data: fileBytes, error: dlErr } = await admin.storage
@@ -142,7 +145,7 @@ export async function parseSow(sowId: string): Promise<SowDocument> {
       .single()
 
     if (updateErr) throw new Error(`DB update failed: ${updateErr.message}`)
-    return updated as SowDocument
+    return { data: updated as SowDocument }
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -150,7 +153,7 @@ export async function parseSow(sowId: string): Promise<SowDocument> {
       .from('sow_documents')
       .update({ parse_status: 'error', parse_error: msg, updated_at: new Date().toISOString() })
       .eq('id', sowId)
-    throw err
+    return { error: msg }
   }
 }
 
