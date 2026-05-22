@@ -21,26 +21,24 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
   async function handleGenerate() {
     setError(null)
     setLoading(true)
-    try {
-      const invoices = await generateInvoiceSchedule(sow.id)
-      onGenerated(invoices)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate schedule')
-    } finally {
-      setLoading(false)
+    const result = await generateInvoiceSchedule(sow.id)
+    setLoading(false)
+    if (result.error || !result.data) {
+      setError(result.error ?? 'Failed to generate schedule')
+    } else {
+      onGenerated(result.data)
     }
   }
 
   async function handleSuggest() {
     setError(null)
     setLoading(true)
-    try {
-      const suggestions = await suggestAmendments(sow.id, sow.manual_revenue_item_id)
-      onSuggestions(suggestions)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate suggestions')
-    } finally {
-      setLoading(false)
+    const result = await suggestAmendments(sow.id, sow.manual_revenue_item_id)
+    setLoading(false)
+    if (result.error || !result.data) {
+      setError(result.error ?? 'Failed to generate suggestions')
+    } else {
+      onSuggestions(result.data)
     }
   }
 

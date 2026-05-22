@@ -47,7 +47,8 @@ export async function getAllInvoiceItems(): Promise<{
   }))
 }
 
-export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]> {
+export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: Invoice[]; error?: string }> {
+  try {
   const supabase = await createServerSupabase()
 
   const { data: sow, error } = await supabase
@@ -56,8 +57,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
     .eq('id', sowId)
     .single()
 
-  if (error || !sow) throw new Error('SOW document not found')
-  if (sow.parse_status !== 'done') throw new Error('SOW has not been parsed yet')
+  if (error || !sow) return { error: 'SOW document not found' }
+  if (sow.parse_status !== 'done') return { error: 'SOW has not been parsed yet' }
 
   const itemId       = sow.manual_revenue_item_id
   const raw          = sow.parsed_raw as SowParsedRaw | null
@@ -189,8 +190,11 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
     .from('invoices')
     .insert(drafts)
     .select()
-  if (insErr) throw new Error(insErr.message)
-  return (data ?? []) as Invoice[]
+  if (insErr) return { error: insErr.message }
+  return { data: (data ?? []) as Invoice[] }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to generate invoice schedule' }
+  }
 }
 
 export async function saveInvoices(
@@ -244,9 +248,10 @@ export async function updateInvoiceStatus(
 export async function suggestAmendments(
   newSowId: string,
   itemId: string,
-): Promise<InvoiceSuggestion[]> {
+): Promise<{ data?: InvoiceSuggestion[]; error?: string }> {
+  try {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!apiKey) return { error: 'ANTHROPIC_API_KEY not configured' }
 
   const supabase = await createServerSupabase()
 
@@ -255,8 +260,8 @@ export async function suggestAmendments(
     supabase.from('invoices').select('*').eq('manual_revenue_item_id', itemId).order('sort'),
   ])
 
-  if (!sow) throw new Error('SOW not found')
-  if (sow.parse_status !== 'done') throw new Error('SOW has not been parsed yet')
+  if (!sow) return { error: 'SOW not found' }
+  if (sow.parse_status !== 'done') return { error: 'SOW has not been parsed yet' }
 
   const prompt = `You are comparing a new contract document against an existing invoice schedule.
 Compare carefully and suggest only meaningful changes.
@@ -299,10 +304,13 @@ Reply ONLY with a valid JSON array of suggestions (empty array if no changes nee
   })
 
   const block = message.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected response from Claude')
+  if (block.type !== 'text') return { error: 'Unexpected response from Claude' }
 
   const jsonText = block.text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
-  return JSON.parse(jsonText) as InvoiceSuggestion[]
+  return { data: JSON.parse(jsonText) as InvoiceSuggestion[] }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to suggest amendments' }
+  }
 }
 
 export async function getAggregatedCashFlow(): Promise<{
