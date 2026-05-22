@@ -549,6 +549,7 @@ export function PodSection({
       {uploadingForItemId && (
         <SowUploadModal
           itemId={uploadingForItemId}
+          clientName={revenueRows.find(r => r.id === uploadingForItemId)?.client_name ?? null}
           onDone={() => {
             const id = uploadingForItemId
             setUploadingForItemId(null)

@@ -6,11 +6,12 @@ import { uploadSow, parseSow } from '@/app/actions/sow'
 
 interface Props {
   itemId: string
+  clientName: string | null
   onDone: (sow: SowDocument) => void
   onClose: () => void
 }
 
-export function SowUploadModal({ itemId, onDone, onClose }: Props) {
+export function SowUploadModal({ itemId, clientName, onDone, onClose }: Props) {
   const [docType, setDocType]   = useState<SowDocumentType>('original')
   const [file, setFile]         = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -60,7 +61,7 @@ export function SowUploadModal({ itemId, onDone, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-bold text-[#0F0F0F]">Upload SOW document</h2>
           <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#6B7280]">
             <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -68,6 +69,15 @@ export function SowUploadModal({ itemId, onDone, onClose }: Props) {
             </svg>
           </button>
         </div>
+
+        {clientName && (
+          <div className="flex items-center gap-2 mb-5 px-3 py-2 bg-[#FFF7ED] border border-[#FED7AA] rounded-xl">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0">
+              <path d="M13.5 8.5l-5.5 5.5a3.5 3.5 0 01-4.95-4.95l6-6a2 2 0 012.83 2.83l-6.01 6a.5.5 0 01-.71-.71l5.5-5.5" />
+            </svg>
+            <span className="text-xs text-[#92400E]">Attaching to <span className="font-semibold">{clientName}</span></span>
+          </div>
+        )}
 
         {/* Document type */}
         <div className="mb-4">

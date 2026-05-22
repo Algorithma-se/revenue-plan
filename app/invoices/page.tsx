@@ -306,6 +306,37 @@ function InvoicesContent() {
               </div>
             ) : (
               <>
+                {/* Client header */}
+                {(() => {
+                  const selected = sidebarItems.find(i => i.itemId === selectedId)
+                  if (!selected) return null
+                  return (
+                    <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm">
+                      <div className="w-9 h-9 rounded-xl bg-[#0F0F0F] flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm font-bold text-white">
+                          {(selected.clientName ?? '?')[0].toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-base font-bold text-[#0F0F0F] truncate">
+                          {selected.clientName ?? '(no name)'}
+                        </h2>
+                        {selected.podId && podNames.get(selected.podId) && (
+                          <p className="text-xs text-[#9CA3AF]">{podNames.get(selected.podId)}</p>
+                        )}
+                      </div>
+                      {contractValueSek != null && (
+                        <div className="ml-auto text-right flex-shrink-0">
+                          <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Contract value</p>
+                          <p className="text-sm font-bold text-[#0F0F0F]">
+                            {Math.round(contractValueSek / 1000).toLocaleString('sv-SE')} kSEK
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
                 {/* Overdue alert */}
                 {overdueInvoices.length > 0 && (
                   <div className="flex items-center gap-2 bg-[#FEF2F2] border border-[#FECACA] rounded-xl px-4 py-3">
@@ -464,6 +495,7 @@ function InvoicesContent() {
       {showUpload && selectedId && (
         <SowUploadModal
           itemId={selectedId}
+          clientName={sidebarItems.find(i => i.itemId === selectedId)?.clientName ?? null}
           onDone={handleParsed}
           onClose={() => setShowUpload(false)}
         />
