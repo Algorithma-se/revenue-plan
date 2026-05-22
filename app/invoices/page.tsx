@@ -18,6 +18,7 @@ import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
 interface SidebarItem {
   itemId:       string
   clientName:   string | null
+  project:      string | null
   podId:        string | null
   invoiceCount: number
   hasSow:       boolean
@@ -36,7 +37,7 @@ const PARSE_STATUS_ICON: Record<string, string> = {
 function getRollingMonths(): string[] {
   const months: string[] = []
   const now = new Date()
-  for (let i = -2; i <= 12; i++) {
+  for (let i = -12; i <= 12; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
     months.push(d.toISOString().slice(0, 10))
   }
@@ -89,8 +90,12 @@ function InvoicesContent() {
   }, [])
 
   const loadAggregate = useCallback(async () => {
-    const data = await getAggregatedCashFlow()
-    setAggData(data)
+    try {
+      const data = await getAggregatedCashFlow()
+      setAggData(data)
+    } catch {
+      setAggData({ planByMonth: {}, invoicedByMonth: {}, expectedByMonth: {} })
+    }
   }, [])
 
   useEffect(() => {
@@ -299,16 +304,35 @@ function InvoicesContent() {
             <select
               value={selectedId ?? ''}
               onChange={e => setSelectedId(e.target.value || null)}
-              className="text-sm border border-[#E5E7EB] rounded-xl px-3 py-1.5 bg-white text-[#0F0F0F] focus:outline-none focus:border-[#61b5cc] transition-colors min-w-[200px]"
+              className="bg-[#F9F9F8] border border-[#EBEBEB] rounded-lg px-3 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent transition-all min-w-[200px]"
             >
               <option value="">— Select client —</option>
-              {filteredItems.map(item => (
-                <option key={item.itemId} value={item.itemId}>
-                  {item.clientName ?? '(no name)'}
-                  {item.hasSow ? ' ·SOW' : ''}
-                  {item.invoiceCount > 0 ? ` · ${item.invoiceCount} inv` : ''}
-                </option>
-              ))}
+              {(() => {
+                const byClient = new Map<string, typeof filteredItems>()
+                for (const item of filteredItems) {
+                  const key = item.clientName ?? '(no name)'
+                  byClient.set(key, [...(byClient.get(key) ?? []), item])
+                }
+                return Array.from(byClient.entries()).map(([clientName, items]) =>
+                  items.length === 1 ? (
+                    <option key={items[0].itemId} value={items[0].itemId}>
+                      {clientName}
+                      {items[0].hasSow ? ' ·SOW' : ''}
+                      {items[0].invoiceCount > 0 ? ` · ${items[0].invoiceCount} inv` : ''}
+                    </option>
+                  ) : (
+                    <optgroup key={clientName} label={clientName}>
+                      {items.map(item => (
+                        <option key={item.itemId} value={item.itemId}>
+                          {item.project ?? clientName}
+                          {item.hasSow ? ' ·SOW' : ''}
+                          {item.invoiceCount > 0 ? ` · ${item.invoiceCount} inv` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )
+                )
+              })()}
             </select>
           </div>
         </div>

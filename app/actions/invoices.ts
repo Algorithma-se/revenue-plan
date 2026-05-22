@@ -18,6 +18,7 @@ export async function getInvoices(itemId: string): Promise<Invoice[]> {
 export async function getAllInvoiceItems(): Promise<{
   itemId: string
   clientName: string | null
+  project: string | null
   podId: string | null
   invoiceCount: number
   hasSow: boolean
@@ -25,7 +26,7 @@ export async function getAllInvoiceItems(): Promise<{
   const supabase = await createServerSupabase()
 
   const [{ data: itemData }, { data: invData }, { data: sowData }] = await Promise.all([
-    supabase.from('manual_revenue_items').select('id, client_name, pod_id').order('sort'),
+    supabase.from('manual_revenue_items').select('id, client_name, project, pod_id').order('sort'),
     supabase.from('invoices').select('manual_revenue_item_id'),
     supabase.from('sow_documents').select('manual_revenue_item_id'),
   ])
@@ -36,9 +37,10 @@ export async function getAllInvoiceItems(): Promise<{
   }
   const sowItemIds = new Set((sowData ?? []).map((r: { manual_revenue_item_id: string }) => r.manual_revenue_item_id))
 
-  return (itemData ?? []).map((item: { id: string; client_name: string | null; pod_id: string | null }) => ({
+  return (itemData ?? []).map((item: { id: string; client_name: string | null; project: string | null; pod_id: string | null }) => ({
     itemId:       item.id,
     clientName:   item.client_name,
+    project:      item.project,
     podId:        item.pod_id,
     invoiceCount: invCounts.get(item.id) ?? 0,
     hasSow:       sowItemIds.has(item.id),

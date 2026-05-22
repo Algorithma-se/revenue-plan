@@ -59,7 +59,11 @@ export function SowCashFlowChart({ planCells, invoices, invoicedByMonth: extInvo
     expected_cash: Math.round((expectedMap.get(m) ?? 0) / 1000),
   }))
 
-  const hasData = data.some(d => d.recognised > 0 || d.invoiced > 0 || d.expected_cash > 0)
+  const hasData = months.some(m =>
+    (planCells[m] ?? 0) > 0 ||
+    (invoicedMap.get(m) ?? 0) > 0 ||
+    (expectedMap.get(m) ?? 0) > 0
+  )
   if (!hasData) return null
 
   const chartWidth = Math.max(months.length * BAR_WIDTH, 480)
