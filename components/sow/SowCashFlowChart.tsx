@@ -16,7 +16,7 @@ function monthLabel(iso: string) {
 }
 
 function fmtK(v: number) {
-  return `${Math.round(v / 1000)} k`
+  return `${Math.round(v)} k`
 }
 
 const SERIES_LABELS: Record<string, string> = {
