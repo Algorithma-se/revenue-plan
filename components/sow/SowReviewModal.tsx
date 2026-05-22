@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import type { SowDocument, SowDeliverable, SowParsedRaw, Invoice, InvoiceSuggestion } from '@/types/database'
-import { generateInvoiceSchedule, suggestAmendments } from '@/app/actions/invoices'
+import { generateInvoiceSchedule, regenerateInvoiceSchedule, suggestAmendments } from '@/app/actions/invoices'
 import { updateSowParsedFields } from '@/app/actions/sow'
 
 interface Props {
   sow:                 SowDocument
   hasExistingInvoices: boolean
-  onGenerated:         (invoices: Invoice[], updatedSow: SowDocument) => void
+  onGenerated:         (invoices: Invoice[], updatedSow: SowDocument, replace?: boolean) => void
   onSuggestions:       (suggestions: InvoiceSuggestion[]) => void
   onClose:             () => void
 }
@@ -90,6 +90,20 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
       setError(result.error ?? 'Failed to generate schedule')
     } else {
       onGenerated(result.data, updatedSow)
+    }
+  }
+
+  async function handleRegenerate() {
+    setError(null)
+    setLoading(true)
+    const updatedSow = await persist()
+    if (!updatedSow) { setLoading(false); return }
+    const result = await regenerateInvoiceSchedule(sow.id)
+    setLoading(false)
+    if (result.error || !result.data) {
+      setError(result.error ?? 'Failed to regenerate schedule')
+    } else {
+      onGenerated(result.data, updatedSow, true)
     }
   }
 
@@ -228,18 +242,27 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
           <button
             onClick={onClose}
             disabled={loading}
-            className="flex-1 py-2 text-sm font-medium text-[#6B7280] border border-[#E5E7EB] rounded-xl hover:bg-[#F9F9F8] transition-colors disabled:opacity-50"
+            className="py-2 px-4 text-sm font-medium text-[#6B7280] border border-[#E5E7EB] rounded-xl hover:bg-[#F9F9F8] transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           {hasExistingInvoices ? (
-            <button
-              onClick={handleSuggest}
-              disabled={loading}
-              className="flex-1 py-2 text-sm font-medium text-white bg-[#0F0F0F] rounded-xl hover:bg-[#374151] transition-colors disabled:opacity-40"
-            >
-              {loading ? 'Analysing…' : 'Suggest amendments'}
-            </button>
+            <>
+              <button
+                onClick={handleSuggest}
+                disabled={loading}
+                className="flex-1 py-2 text-sm font-medium text-[#0F0F0F] border border-[#E5E7EB] rounded-xl hover:bg-[#F9F9F8] transition-colors disabled:opacity-40"
+              >
+                {loading ? 'Analysing…' : 'Suggest amendments'}
+              </button>
+              <button
+                onClick={handleRegenerate}
+                disabled={loading}
+                className="flex-1 py-2 text-sm font-medium text-white bg-[#0F0F0F] rounded-xl hover:bg-[#374151] transition-colors disabled:opacity-40"
+              >
+                {loading ? 'Regenerating…' : 'Regenerate'}
+              </button>
+            </>
           ) : (
             <button
               onClick={handleGenerate}

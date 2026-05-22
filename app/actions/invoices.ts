@@ -227,6 +227,16 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
   }
 }
 
+export async function regenerateInvoiceSchedule(sowId: string): Promise<{ data?: Invoice[]; error?: string }> {
+  try {
+    const supabase = await createServerSupabase()
+    await supabase.from('invoices').delete().eq('sow_document_id', sowId)
+    return generateInvoiceSchedule(sowId)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to regenerate invoice schedule' }
+  }
+}
+
 export async function saveInvoices(
   itemId: string,
   drafts: InvoiceDraft[],

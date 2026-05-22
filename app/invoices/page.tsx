@@ -214,14 +214,20 @@ function InvoicesContent() {
     loadSidebar()
   }
 
-  function handleGenerated(newInvoices: Invoice[], updatedSow: SowDocument) {
+  function handleGenerated(newInvoices: Invoice[], updatedSow: SowDocument, replace = false) {
     setSowDocs(ds => ds.map(d => d.id === updatedSow.id ? updatedSow : d))
-    setInvoices(prev => {
-      const merged = [...prev, ...newInvoices]
-      setDrafts(invoicesToDrafts(merged))
-      return merged
-    })
+    if (replace) {
+      setInvoices(newInvoices)
+      setDrafts(invoicesToDrafts(newInvoices))
+    } else {
+      setInvoices(prev => {
+        const merged = [...prev, ...newInvoices]
+        setDrafts(invoicesToDrafts(merged))
+        return merged
+      })
+    }
     setReviewSow(null)
+    loadSidebar()
     loadAggregate()
   }
 
