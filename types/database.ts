@@ -96,7 +96,29 @@ export type SowParseStatus  = 'pending' | 'parsing' | 'done' | 'error'
 export type SowDocumentType = 'original' | 'amendment' | 'change_request'
 export type InvoiceStatus   = 'draft' | 'sent' | 'paid' | 'overdue'
 export type PaymentTrigger  = 'date' | 'milestone'
-export interface SowDeliverable { label: string; due_date: string | null }
+export interface SowDeliverable {
+  label: string
+  due_date: string | null
+  amount_sek: number | null
+  estimated_hours: number | null
+}
+
+export interface SowMonthlyHours {
+  month: string   // "YYYY-MM"
+  hours: number
+}
+
+export interface SowParsedRaw {
+  client_name: string | null
+  total_value_sek: number | null
+  currency: string | null
+  hourly_rate_sek: number | null
+  start_date: string | null
+  end_date: string | null
+  payment_terms: string | null
+  deliverables: SowDeliverable[]
+  monthly_hours: SowMonthlyHours[]
+}
 
 export interface SowDocument {
   id: string
@@ -113,7 +135,7 @@ export interface SowDocument {
   parsed_end_date: string | null
   parsed_payment_terms: string | null
   parsed_deliverables: SowDeliverable[] | null
-  parsed_raw: unknown
+  parsed_raw: SowParsedRaw | null
   parse_status: SowParseStatus
   parse_error: string | null
   created_at: string

@@ -2,7 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase-server'
-import type { Invoice, InvoiceDraft, InvoiceStatus, InvoiceSuggestion } from '@/types/database'
+import type { Invoice, InvoiceDraft, InvoiceStatus, InvoiceSuggestion, SowDeliverable } from '@/types/database'
 
 export async function getInvoices(itemId: string): Promise<Invoice[]> {
   const supabase = await createServerSupabase()
@@ -63,10 +63,15 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
   const end      = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
   const terms    = (sow.parsed_payment_terms ?? '').toLowerCase()
   const termDays = parsePaymentTermsDays(terms)
-  const deliverables: { label: string; due_date: string | null }[] = sow.parsed_deliverables ?? []
+  const deliverables: SowDeliverable[] = (sow.parsed_deliverables ?? []) as SowDeliverable[]
   const year     = start.getFullYear()
 
   const drafts: Omit<Invoice, 'id' | 'created_at' | 'updated_at'>[] = []
+
+  // If deliverables have explicit amounts, use them; otherwise divide total evenly
+  const deliverablesHaveAmounts = deliverables.length > 0 &&
+    deliverables.every(d => d.amount_sek != null && d.amount_sek > 0)
+  const fallbackAmount = deliverables.length > 0 ? total / deliverables.length : total
 
   if (deliverables.length > 0) {
     deliverables.forEach((d, i) => {
@@ -77,7 +82,7 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
         invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
         issue_date:             toIso(issueDate),
         due_date:               toIso(addDays(issueDate, termDays)),
-        amount_sek:             total / deliverables.length,
+        amount_sek:             deliverablesHaveAmounts ? d.amount_sek! : fallbackAmount,
         payment_trigger:        'milestone',
         milestone_label:        d.label,
         status:                 'draft',

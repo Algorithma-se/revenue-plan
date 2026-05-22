@@ -3,7 +3,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase-admin'
 import { createServerSupabase } from '@/lib/supabase-server'
-import type { SowDocument, SowDocumentType, SowDeliverable } from '@/types/database'
+import type { SowDocument, SowDocumentType, SowDeliverable, SowParsedRaw } from '@/types/database'
 
 const ALLOWED_MIME = [
   'application/pdf',
@@ -88,8 +88,37 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
     const buffer = Buffer.from(await fileBytes.arrayBuffer())
     const client = new Anthropic({ apiKey })
 
-    const prompt = `Extract from this Statement of Work. Reply ONLY with valid JSON, no other text:
-{"client_name":string|null,"total_value_sek":number|null,"start_date":"YYYY-MM-DD"|null,"end_date":"YYYY-MM-DD"|null,"payment_terms":string|null,"deliverables":[{"label":string,"due_date":"YYYY-MM-DD"|null}]}`
+    const prompt = `You are analysing a Statement of Work (SOW). Extract all relevant details and reply ONLY with valid JSON — no markdown, no explanation, no surrounding text.
+
+{
+  "client_name": string | null,
+  "total_value_sek": number | null,
+  "currency": string | null,
+  "hourly_rate_sek": number | null,
+  "start_date": "YYYY-MM-DD" | null,
+  "end_date": "YYYY-MM-DD" | null,
+  "payment_terms": string | null,
+  "deliverables": [
+    {
+      "label": string,
+      "due_date": "YYYY-MM-DD" | null,
+      "amount_sek": number | null,
+      "estimated_hours": number | null
+    }
+  ],
+  "monthly_hours": [
+    { "month": "YYYY-MM", "hours": number }
+  ]
+}
+
+Rules:
+- total_value_sek: convert to SEK if another currency is used (use approximate rates).
+- currency: the original contract currency, e.g. "SEK", "EUR", "USD".
+- hourly_rate_sek: extract if the contract is time-and-materials or mentions a rate per hour.
+- deliverables[].amount_sek: look for an explicit amount per milestone or invoice. If the total is split evenly across deliverables, compute total_value_sek / n. If scope descriptions imply unequal effort, distribute proportionally.
+- deliverables[].estimated_hours: extract if stated; if hourly_rate_sek is known, derive from amount_sek / rate; otherwise estimate from scope descriptions.
+- monthly_hours: estimate billable hours per calendar month across the project duration. Use workload descriptions, team size, sprint plans, or total hours if mentioned. If hourly_rate_sek is known, derive each month's hours from that month's invoiced amount / rate. If nothing is stated, distribute total effort evenly across months between start_date and end_date.
+- Use null for any field that cannot be determined.`
 
     let messageContent: Anthropic.MessageParam['content']
 
@@ -110,7 +139,7 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
 
     const message = await client.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       messages:   [{ role: 'user', content: messageContent }],
     })
 
@@ -118,14 +147,7 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
     if (block.type !== 'text') throw new Error('Unexpected response from Claude')
 
     const jsonText = block.text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '')
-    const parsed = JSON.parse(jsonText) as {
-      client_name: string | null
-      total_value_sek: number | null
-      start_date: string | null
-      end_date: string | null
-      payment_terms: string | null
-      deliverables: SowDeliverable[]
-    }
+    const parsed = JSON.parse(jsonText) as SowParsedRaw
 
     const { data: updated, error: updateErr } = await admin
       .from('sow_documents')
