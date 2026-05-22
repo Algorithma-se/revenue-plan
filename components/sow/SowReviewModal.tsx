@@ -48,14 +48,29 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
   if (startInPast) warnings.push(`Start date ${startDate} is in the past — confirm this is correct`)
 
   async function persist(): Promise<SowDocument | null> {
+    // If the user changed the start date, shift all deliverable dates by the
+    // same delta so the generated schedule reflects the corrected timeline.
+    let finalDeliverables = deliverables
+    const origStart = sow.parsed_start_date
+    const nextStart = startDate || null
+    if (origStart && nextStart && origStart !== nextStart) {
+      const deltaMs = isoToMs(nextStart) - isoToMs(origStart)
+      finalDeliverables = deliverables.map(d => ({
+        ...d,
+        invoice_date: d.invoice_date ? shiftDate(d.invoice_date, deltaMs) : d.invoice_date,
+        due_date:     d.due_date     ? shiftDate(d.due_date,     deltaMs) : d.due_date,
+      }))
+      setDeliverables(finalDeliverables)
+    }
+
     const result = await updateSowParsedFields(sow.id, {
       parsed_client_name:     clientName.trim() || null,
       parsed_total_value_sek: totalKsek ? Number(totalKsek) * 1000 : null,
-      parsed_start_date:      startDate || null,
+      parsed_start_date:      nextStart,
       parsed_end_date:        endDate || null,
       parsed_payment_terms:   paymentTerms.trim() || null,
       invoicing_model:        invoicingModel || null,
-      parsed_deliverables:    deliverables,
+      parsed_deliverables:    finalDeliverables,
     })
     if (result.error || !result.data) {
       setError(result.error ?? 'Failed to save changes')
@@ -247,6 +262,15 @@ interface EditFieldProps {
   type?:       'text' | 'number' | 'date'
   placeholder?: string
   highlight?:  'warn' | 'error'
+}
+
+function isoToMs(iso: string): number {
+  return new Date(iso + 'T12:00:00').getTime()
+}
+
+function shiftDate(iso: string, deltaMs: number): string {
+  const d = new Date(isoToMs(iso) + deltaMs)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function EditField({ label, value, onChange, type = 'text', placeholder, highlight }: EditFieldProps) {
