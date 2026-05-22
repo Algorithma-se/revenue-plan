@@ -214,7 +214,8 @@ function InvoicesContent() {
     loadSidebar()
   }
 
-  function handleGenerated(newInvoices: Invoice[]) {
+  function handleGenerated(newInvoices: Invoice[], updatedSow: SowDocument) {
+    setSowDocs(ds => ds.map(d => d.id === updatedSow.id ? updatedSow : d))
     setInvoices(prev => {
       const merged = [...prev, ...newInvoices]
       setDrafts(invoicesToDrafts(merged))

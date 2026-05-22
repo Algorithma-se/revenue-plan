@@ -1,38 +1,84 @@
 'use client'
 
 import { useState } from 'react'
-import type { SowDocument, SowDeliverable, SowParsedRaw } from '@/types/database'
+import type { SowDocument, SowDeliverable, SowParsedRaw, Invoice, InvoiceSuggestion } from '@/types/database'
 import { generateInvoiceSchedule, suggestAmendments } from '@/app/actions/invoices'
-import type { Invoice, InvoiceSuggestion } from '@/types/database'
+import { updateSowParsedFields } from '@/app/actions/sow'
 
 interface Props {
-  sow: SowDocument
+  sow:                 SowDocument
   hasExistingInvoices: boolean
-  onGenerated: (invoices: Invoice[]) => void
-  onSuggestions: (suggestions: InvoiceSuggestion[]) => void
-  onClose: () => void
+  onGenerated:         (invoices: Invoice[], updatedSow: SowDocument) => void
+  onSuggestions:       (suggestions: InvoiceSuggestion[]) => void
+  onClose:             () => void
 }
 
+const MODEL_OPTIONS = [
+  { value: 'capacity',           label: 'Capacity / retainer' },
+  { value: 'time_and_materials', label: 'Time & materials' },
+  { value: 'milestone',          label: 'Milestone' },
+  { value: 'fixed_fee',          label: 'Fixed fee' },
+]
+
 export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSuggestions, onClose }: Props) {
-  const [deliverables, setDeliverables] = useState<SowDeliverable[]>(sow.parsed_deliverables ?? [])
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState<string | null>(null)
+  const raw   = sow.parsed_raw as SowParsedRaw | null
+  const today = new Date().toISOString().slice(0, 10)
+
+  const [clientName,     setClientName]     = useState(sow.parsed_client_name ?? '')
+  const [totalKsek,      setTotalKsek]      = useState(
+    sow.parsed_total_value_sek != null ? String(Math.round(sow.parsed_total_value_sek / 1000)) : ''
+  )
+  const [startDate,      setStartDate]      = useState(sow.parsed_start_date ?? '')
+  const [endDate,        setEndDate]        = useState(sow.parsed_end_date ?? '')
+  const [paymentTerms,   setPaymentTerms]   = useState(sow.parsed_payment_terms ?? '')
+  const [invoicingModel, setInvoicingModel] = useState(raw?.invoicing_model ?? '')
+  const [deliverables,   setDeliverables]   = useState<SowDeliverable[]>(sow.parsed_deliverables ?? [])
+  const [loading,        setLoading]        = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
+
+  const missingPaymentTerms = !paymentTerms.trim()
+  const startInPast         = !!startDate && startDate < today
+  const missingTotal        = !totalKsek || Number(totalKsek) <= 0
+
+  const warnings: { text: string; field?: string }[] = []
+  if (missingPaymentTerms) warnings.push({ text: 'Payment terms not found — add them before generating (e.g. "Net 30")', field: 'paymentTerms' })
+  if (startInPast)         warnings.push({ text: `Start date ${startDate} is in the past — confirm this is correct`, field: 'startDate' })
+  if (missingTotal)        warnings.push({ text: 'Contract value is missing — invoice schedule amounts will be approximate', field: 'total' })
+
+  async function persist(): Promise<SowDocument | null> {
+    const result = await updateSowParsedFields(sow.id, {
+      parsed_client_name:     clientName.trim() || null,
+      parsed_total_value_sek: totalKsek ? Number(totalKsek) * 1000 : null,
+      parsed_start_date:      startDate || null,
+      parsed_end_date:        endDate || null,
+      parsed_payment_terms:   paymentTerms.trim() || null,
+      invoicing_model:        invoicingModel || null,
+    })
+    if (result.error || !result.data) {
+      setError(result.error ?? 'Failed to save changes')
+      return null
+    }
+    return result.data
+  }
 
   async function handleGenerate() {
     setError(null)
     setLoading(true)
+    const updatedSow = await persist()
+    if (!updatedSow) { setLoading(false); return }
     const result = await generateInvoiceSchedule(sow.id)
     setLoading(false)
     if (result.error || !result.data) {
       setError(result.error ?? 'Failed to generate schedule')
     } else {
-      onGenerated(result.data)
+      onGenerated(result.data, updatedSow)
     }
   }
 
   async function handleSuggest() {
     setError(null)
     setLoading(true)
+    await persist()
     const result = await suggestAmendments(sow.id, sow.manual_revenue_item_id)
     setLoading(false)
     if (result.error || !result.data) {
@@ -42,21 +88,14 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
     }
   }
 
-  const totalKSEK = sow.parsed_total_value_sek ? Math.round(sow.parsed_total_value_sek / 1000) : null
-  const raw = sow.parsed_raw as SowParsedRaw | null
-  const MODEL_LABEL: Record<string, string> = {
-    milestone: 'Milestone',
-    time_and_materials: 'Time & materials',
-    capacity: 'Capacity / retainer',
-    fixed_fee: 'Fixed fee',
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+
+        {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-base font-bold text-[#0F0F0F]">Review extracted data</h2>
+            <h2 className="text-base font-bold text-[#0F0F0F]">Review & confirm extracted data</h2>
             <p className="text-xs text-[#9CA3AF] mt-0.5">{sow.file_name}</p>
           </div>
           <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#6B7280]">
@@ -67,48 +106,77 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
         </div>
 
         <div className="space-y-4">
-          {/* Read-only summary of parsed fields */}
+          {/* Editable fields */}
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Client" value={sow.parsed_client_name ?? '—'} />
-            <Field label="Total value" value={totalKSEK != null ? `${totalKSEK.toLocaleString('sv-SE')} kSEK` : '—'} />
-            <Field label="Start date" value={sow.parsed_start_date ?? '—'} />
-            <Field label="End date"   value={sow.parsed_end_date   ?? '—'} />
+            <EditField label="Client" value={clientName} onChange={setClientName} placeholder="Client name" />
+            <EditField
+              label="Total value (kSEK)"
+              value={totalKsek}
+              onChange={setTotalKsek}
+              type="number"
+              placeholder="e.g. 1 048"
+              highlight={missingTotal ? 'warn' : undefined}
+            />
+            <EditField
+              label="Start date"
+              value={startDate}
+              onChange={setStartDate}
+              type="date"
+              highlight={startInPast ? 'warn' : undefined}
+            />
+            <EditField label="End date" value={endDate} onChange={setEndDate} type="date" />
+            <EditField
+              label="Payment terms"
+              value={paymentTerms}
+              onChange={setPaymentTerms}
+              placeholder="e.g. Net 30"
+              highlight={missingPaymentTerms ? 'warn' : undefined}
+            />
+            <div>
+              <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">
+                Invoicing model
+              </label>
+              <select
+                value={invoicingModel}
+                onChange={e => setInvoicingModel(e.target.value)}
+                className="w-full bg-[#F9F9F8] border border-[#EBEBEB] rounded-lg px-2.5 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent transition-all"
+              >
+                <option value="">— unknown —</option>
+                {MODEL_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {raw?.invoicing_model && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-[#F0F9FF] border border-[#BAE6FD] rounded-xl">
-              <span className="text-[10px] font-bold text-[#0369A1] uppercase tracking-wider">Invoicing model</span>
-              <span className="text-xs font-semibold text-[#0F0F0F]">{MODEL_LABEL[raw.invoicing_model] ?? raw.invoicing_model}</span>
-              {raw.hourly_rate_sek && (
-                <span className="ml-auto text-xs text-[#6B7280]">{Math.round(raw.hourly_rate_sek).toLocaleString('sv-SE')} kr/h</span>
-              )}
-              {raw.monthly_fee_sek && (
-                <span className="ml-auto text-xs text-[#6B7280]">{Math.round(raw.monthly_fee_sek / 1000)} kSEK/month</span>
-              )}
-              {raw.fte_count && (
-                <span className="ml-auto text-xs text-[#6B7280]">{raw.fte_count} FTE</span>
-              )}
+          {/* Warnings */}
+          {warnings.length > 0 && (
+            <div className="space-y-1.5">
+              {warnings.map((w, i) => (
+                <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl">
+                  <span className="text-[#D97706] text-xs mt-0.5 flex-shrink-0">⚠</span>
+                  <p className="text-xs text-[#92400E]">{w.text}</p>
+                </div>
+              ))}
             </div>
           )}
 
-          {sow.parsed_payment_terms && (
-            <Field label="Payment terms" value={sow.parsed_payment_terms} />
-          )}
-
-          {/* Deliverables */}
+          {/* Deliverables / billing periods */}
           {deliverables.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                Deliverables ({deliverables.length})
+                Billing periods / deliverables ({deliverables.length})
               </label>
               <div className="space-y-1.5">
                 {deliverables.map((d, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs bg-[#F9FAFB] rounded-lg px-3 py-2">
                     <span className="flex-1 text-[#0F0F0F]">{d.label}</span>
-                    {d.due_date && <span className="text-[#9CA3AF]">{d.due_date}</span>}
+                    {(d.invoice_date || d.due_date) && (
+                      <span className="text-[#9CA3AF] flex-shrink-0">{d.invoice_date ?? d.due_date}</span>
+                    )}
                     <button
                       onClick={() => setDeliverables(ds => ds.filter((_, j) => j !== i))}
-                      className="text-[#D1D5DB] hover:text-[#DC2626]"
+                      className="text-[#D1D5DB] hover:text-[#DC2626] flex-shrink-0"
                     >✕</button>
                   </div>
                 ))}
@@ -159,11 +227,33 @@ export function SowReviewModal({ sow, hasExistingInvoices, onGenerated, onSugges
   )
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+interface EditFieldProps {
+  label:       string
+  value:       string
+  onChange:    (v: string) => void
+  type?:       'text' | 'number' | 'date'
+  placeholder?: string
+  highlight?:  'warn' | 'error'
+}
+
+function EditField({ label, value, onChange, type = 'text', placeholder, highlight }: EditFieldProps) {
+  const borderClass = highlight === 'error'
+    ? 'border-[#FCA5A5] focus:ring-[#EF4444]'
+    : highlight === 'warn'
+    ? 'border-[#FDE68A] focus:ring-[#F59E0B]'
+    : 'border-[#EBEBEB] focus:ring-[#61b5cc]'
   return (
     <div>
-      <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">{label}</label>
-      <p className="text-sm text-[#0F0F0F]">{value}</p>
+      <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full bg-[#F9F9F8] border rounded-lg px-2.5 py-1.5 text-sm text-[#0F0F0F] focus:outline-none focus:ring-2 focus:border-transparent transition-all ${borderClass}`}
+      />
     </div>
   )
 }

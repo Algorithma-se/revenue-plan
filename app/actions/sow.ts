@@ -243,6 +243,48 @@ export async function deleteSow(sowId: string, deleteInvoices = false): Promise<
   await admin.from('sow_documents').delete().eq('id', sowId)
 }
 
+export async function updateSowParsedFields(
+  sowId: string,
+  updates: {
+    parsed_client_name:     string | null
+    parsed_total_value_sek: number | null
+    parsed_start_date:      string | null
+    parsed_end_date:        string | null
+    parsed_payment_terms:   string | null
+    invoicing_model:        string | null
+  },
+): Promise<{ data?: SowDocument; error?: string }> {
+  try {
+    const admin = createAdminSupabase()
+
+    const { data: current } = await admin
+      .from('sow_documents').select('parsed_raw').eq('id', sowId).single()
+
+    const existing = (current?.parsed_raw ?? {}) as Record<string, unknown>
+    const updatedRaw = { ...existing, invoicing_model: updates.invoicing_model }
+
+    const { data, error } = await admin
+      .from('sow_documents')
+      .update({
+        parsed_client_name:     updates.parsed_client_name,
+        parsed_total_value_sek: updates.parsed_total_value_sek,
+        parsed_start_date:      updates.parsed_start_date,
+        parsed_end_date:        updates.parsed_end_date,
+        parsed_payment_terms:   updates.parsed_payment_terms,
+        parsed_raw:             updatedRaw,
+        updated_at:             new Date().toISOString(),
+      })
+      .eq('id', sowId)
+      .select()
+      .single()
+
+    if (error) return { error: error.message }
+    return { data: data as SowDocument }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save changes' }
+  }
+}
+
 export async function getSowDocuments(itemId: string): Promise<SowDocument[]> {
   const supabase = await createServerSupabase()
   const { data, error } = await supabase
