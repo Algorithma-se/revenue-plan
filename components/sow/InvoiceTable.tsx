@@ -50,8 +50,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
 
   return (
     <div>
-      <div className="rounded-xl border border-[#E5E7EB]">
-        <table className="w-full table-fixed text-xs">
+      <table className="w-full table-fixed text-xs">
           <colgroup>
             <col className="w-[13%]" /> {/* # */}
             <col className="w-[12%]" /> {/* Issue date */}
@@ -158,10 +157,9 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
               )
             })}
           </tbody>
-        </table>
-      </div>
+      </table>
 
-      <div className="flex items-center justify-between mt-3">
+      <div className="flex items-center justify-between px-4 py-3 border-t border-[#F3F4F6]">
         <button
           onClick={addRow}
           className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#2563EB] transition-colors"

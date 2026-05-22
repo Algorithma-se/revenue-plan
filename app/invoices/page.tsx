@@ -610,36 +610,34 @@ function InvoicesContent() {
                       </button>
                     </div>
                   </div>
-                  <div className="p-5">
-                    {drafts.length === 0 && (
-                      <div className="flex items-center gap-3 mb-4 p-3 bg-[#F8FAFC] rounded-xl border border-[#E5E7EB]">
-                        <p className="text-xs text-[#6B7280] flex-1">
-                          {sowDocs.length === 0
-                            ? 'No invoices yet. Upload a SOW to auto-generate, or add rows manually below.'
-                            : 'No invoices yet. Generate from the latest SOW or add rows manually below.'}
-                        </p>
-                        <div className="flex gap-2 flex-shrink-0">
-                          {latestSow?.parse_status === 'done' && (
-                            <button onClick={() => setReviewSow(latestSow)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
-                              Generate from SOW
-                            </button>
-                          )}
-                          {sowDocs.length === 0 && (
-                            <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
-                              Upload SOW
-                            </button>
-                          )}
-                        </div>
+                  {drafts.length === 0 && (
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F3F4F6]">
+                      <p className="text-xs text-[#6B7280] flex-1">
+                        {sowDocs.length === 0
+                          ? 'No invoices yet. Upload a SOW to auto-generate, or add rows manually below.'
+                          : 'No invoices yet. Generate from the latest SOW or add rows manually below.'}
+                      </p>
+                      <div className="flex gap-2 flex-shrink-0">
+                        {latestSow?.parse_status === 'done' && (
+                          <button onClick={() => setReviewSow(latestSow)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
+                            Generate from SOW
+                          </button>
+                        )}
+                        {sowDocs.length === 0 && (
+                          <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 text-xs font-medium text-white bg-[#0F0F0F] rounded-lg hover:bg-[#374151] transition-colors">
+                            Upload SOW
+                          </button>
+                        )}
                       </div>
-                    )}
-                    <InvoiceTable
+                    </div>
+                  )}
+                  <InvoiceTable
                       drafts={drafts}
                       savedInvoices={invoices}
                       contractValueSek={contractValueSek}
                       onChange={setDrafts}
                       onStatusChange={handleStatusChange}
                     />
-                  </div>
                 </div>
 
                 {/* Per-client cash flow chart */}
