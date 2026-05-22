@@ -254,8 +254,8 @@ function InvoicesContent() {
 
               {sidebarItems.length === 0 ? (
                 <div className="px-4 py-6 text-center">
-                  <p className="text-xs text-[#9CA3AF]">No clients with invoices yet.</p>
-                  <p className="text-xs text-[#9CA3AF] mt-1">Attach a SOW to a revenue row in the P&L to get started.</p>
+                  <p className="text-xs text-[#9CA3AF]">No revenue items yet.</p>
+                  <p className="text-xs text-[#9CA3AF] mt-1">Add items in the P&L Plan first.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-[#F3F4F6]">
@@ -294,7 +294,7 @@ function InvoicesContent() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-10 h-10 mx-auto text-[#D1D5DB] mb-3">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
-                <p className="text-sm text-[#6B7280]">Select a client from the sidebar, or attach a SOW to a revenue row in the P&L.</p>
+                <p className="text-sm text-[#6B7280]">Select a client from the sidebar to view or create invoices.</p>
               </div>
             ) : loadingMain ? (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 shadow-sm">
