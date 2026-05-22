@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell } from '@/types/database'
 import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
 import type { Trend } from '@/lib/plan-utils'
@@ -9,6 +10,8 @@ import { CostItemModal } from './CostItemModal'
 import { ClientBadge } from './ClientBadge'
 import { ItemModal } from '@/components/ItemModal'
 import type { ItemModalSaveData } from '@/components/ItemModal'
+import { SowIcon } from '@/components/sow/SowIcon'
+import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
 
 function colStyle(n: number) {
   return { gridTemplateColumns: `200px repeat(${n}, 76px) 80px` }
@@ -68,7 +71,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, isNoPod, showOnly, mobileMonth,
+  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, sowDocItemIds, isNoPod, showOnly, mobileMonth,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -81,6 +84,7 @@ export function PodSection({
   months: readonly string[]
   allPlanRevCells: PlanRevenueCell[]
   clientTrends: Map<string, Trend | null>
+  sowDocItemIds: Set<string>
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
   mobileMonth?: string
@@ -134,6 +138,9 @@ export function PodSection({
       return next
     })
   }
+
+  const router = useRouter()
+  const { invoicesEnabled } = useFeatureFlags()
 
   const [addingRevenue, setAddingRevenue]         = useState(false)
   const [editingRevenueRow, setEditingRevenueRow] = useState<RevenueRow | null>(null)
@@ -217,6 +224,12 @@ export function PodSection({
                       {row.client_name ?? '—'}
                     </span>
                     <ClientBadge trend={clientTrends.get(row.client_name ?? '') ?? null} />
+                    {invoicesEnabled && (
+                      <SowIcon
+                        hasSow={sowDocItemIds.has(row.id)}
+                        onClick={() => router.push(`/invoices?item=${row.id}`)}
+                      />
+                    )}
                   </div>
                   {row.project && (
                     <span className="text-[10px] text-[#9CA3AF] truncate mt-0.5">{row.project}</span>
@@ -395,6 +408,10 @@ export function PodSection({
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-medium text-[#111827] truncate">{row.client_name ?? '—'}</span>
                           <ClientBadge trend={clientTrends.get(row.client_name ?? '') ?? null} />
+                          <SowIcon
+                            hasSow={sowDocItemIds.has(row.id)}
+                            onClick={() => router.push(`/invoices?item=${row.id}`)}
+                          />
                         </div>
                         {row.project && <span className="text-[10px] text-[#9CA3AF] truncate">{row.project}</span>}
                       </div>

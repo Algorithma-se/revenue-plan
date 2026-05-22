@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
 
 interface UserInfo {
   email:  string | null
@@ -12,19 +13,25 @@ interface UserInfo {
   avatar: string | null
 }
 
-const NAV_LINKS = [
-  { href: '/',      label: 'Work List' },
-  { href: '/plan',  label: 'P&L Plan'  },
-  { href: '/faq',   label: 'FAQ'       },
+const BASE_NAV_LINKS = [
+  { href: '/',         label: 'Work List', flag: null        },
+  { href: '/plan',     label: 'P&L Plan',  flag: null        },
+  { href: '/invoices', label: 'Invoices',  flag: 'invoices'  },
+  { href: '/faq',      label: 'FAQ',       flag: null        },
 ]
 
 export default function Header() {
   const pathname = usePathname()
   const router   = useRouter()
+  const { invoicesEnabled } = useFeatureFlags()
   const [user, setUser]             = useState<UserInfo | null>(null)
   const [menuOpen, setMenuOpen]     = useState(false)
   const [navOpen, setNavOpen]       = useState(false)
   const [avatarError, setAvatarError] = useState(false)
+
+  const NAV_LINKS = BASE_NAV_LINKS.filter(l =>
+    l.flag !== 'invoices' || invoicesEnabled
+  )
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user: u } }) => {

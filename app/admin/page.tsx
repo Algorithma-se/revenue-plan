@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { getAllowedEmails, addAllowedEmail, removeAllowedEmail } from '@/app/actions/admin'
+import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag } from '@/app/actions/admin'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
 
@@ -18,15 +18,22 @@ function timeAgo(iso: string): string {
 }
 
 export default function AdminPage() {
-  const [entries, setEntries]   = useState<Entry[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [newEmail, setNewEmail] = useState('')
-  const [error, setError]       = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [entries, setEntries]           = useState<Entry[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [newEmail, setNewEmail]         = useState('')
+  const [error, setError]               = useState<string | null>(null)
+  const [isPending, startTransition]    = useTransition()
+  const [invoicesEnabled, setInvoicesEnabled] = useState(true)
+  const [flagSaving, setFlagSaving]     = useState(false)
 
   async function load() {
     try {
-      setEntries(await getAllowedEmails())
+      const [emails, flag] = await Promise.all([
+        getAllowedEmails(),
+        getFeatureFlag('invoices'),
+      ])
+      setEntries(emails)
+      setInvoicesEnabled(flag)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
@@ -35,6 +42,19 @@ export default function AdminPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function handleToggleInvoices(next: boolean) {
+    setInvoicesEnabled(next)
+    setFlagSaving(true)
+    try {
+      await setFeatureFlag('invoices', next)
+    } catch (e) {
+      setInvoicesEnabled(!next) // revert on error
+      setError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setFlagSaving(false)
+    }
+  }
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -121,6 +141,37 @@ export default function AdminPage() {
           {error}
         </p>
       )}
+
+      {/* Feature flags */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-[#0F0F0F] mb-3">Feature visibility</h2>
+        <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-[#0F0F0F]">Invoices</p>
+              <p className="text-xs text-[#9CA3AF] mt-0.5">
+                SOW documents, invoice schedules, and cash flow charts.
+                {!invoicesEnabled && <span className="text-[#D97706] ml-1">Hidden from all users.</span>}
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={invoicesEnabled}
+              onClick={() => handleToggleInvoices(!invoicesEnabled)}
+              disabled={flagSaving || loading}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                invoicesEnabled ? 'bg-[#61b5cc]' : 'bg-[#D1D5DB]'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  invoicesEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* User list */}
       <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">

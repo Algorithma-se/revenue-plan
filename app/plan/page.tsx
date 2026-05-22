@@ -22,11 +22,12 @@ import { RevenueDonut } from '@/components/plan/RevenueDonut'
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
 interface PlanState {
-  pods:         Pod[]
-  manualItems:  ManualRevenueItem[]
-  planRevCells: PlanRevenueCell[]
-  costItems:    CostItem[]
-  costCells:    PlanCostCell[]
+  pods:          Pod[]
+  manualItems:   ManualRevenueItem[]
+  planRevCells:  PlanRevenueCell[]
+  costItems:     CostItem[]
+  costCells:     PlanCostCell[]
+  sowDocItemIds: Set<string>
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -55,20 +56,23 @@ export default function PlanPage() {
       { data: planRevCells },
       { data: costItems },
       { data: costCells },
+      { data: sowDocs },
     ] = await Promise.all([
       supabase.from('pods').select('*').order('sort'),
       supabase.from('manual_revenue_items').select('*').order('sort'),
       supabase.from('plan_revenue_cells').select('*'),
       supabase.from('cost_items').select('*').order('sort'),
       supabase.from('plan_cost_cells').select('*'),
+      supabase.from('sow_documents').select('manual_revenue_item_id'),
     ])
 
     setState({
-      pods:         (pods ?? [])         as Pod[],
-      manualItems:  (manualItems ?? [])  as ManualRevenueItem[],
-      planRevCells: (planRevCells ?? []) as PlanRevenueCell[],
-      costItems:    (costItems ?? [])    as CostItem[],
-      costCells:    (costCells ?? [])    as PlanCostCell[],
+      pods:          (pods ?? [])         as Pod[],
+      manualItems:   (manualItems ?? [])  as ManualRevenueItem[],
+      planRevCells:  (planRevCells ?? []) as PlanRevenueCell[],
+      costItems:     (costItems ?? [])    as CostItem[],
+      costCells:     (costCells ?? [])    as PlanCostCell[],
+      sowDocItemIds: new Set((sowDocs ?? []).map((r: { manual_revenue_item_id: string }) => r.manual_revenue_item_id)),
     })
     setLoading(false)
   }, [])
@@ -380,7 +384,7 @@ export default function PlanPage() {
             const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
             const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
             const mobileCommonProps = {
-              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells, clientTrends,
+              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells, clientTrends, sowDocItemIds: state.sowDocItemIds,
               onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveManualCellAmount(itemId, month, status, amount),
               onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
               onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
@@ -420,6 +424,7 @@ export default function PlanPage() {
                 costRows,
                 allPlanRevCells: state.planRevCells,
                 clientTrends,
+                sowDocItemIds: state.sowDocItemIds,
                 onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) =>
                   saveManualCellAmount(itemId, month, status, amount),
                 onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>

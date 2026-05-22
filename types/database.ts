@@ -90,6 +90,74 @@ export interface PlanTarget {
   margin_target: number
 }
 
+// ─── SOW & Invoice types ───────────────────────────────────────────────────────
+
+export type SowParseStatus  = 'pending' | 'parsing' | 'done' | 'error'
+export type SowDocumentType = 'original' | 'amendment' | 'change_request'
+export type InvoiceStatus   = 'draft' | 'sent' | 'paid' | 'overdue'
+export type PaymentTrigger  = 'date' | 'milestone'
+export interface SowDeliverable { label: string; due_date: string | null }
+
+export interface SowDocument {
+  id: string
+  manual_revenue_item_id: string
+  document_type: SowDocumentType
+  version_number: number
+  file_name: string
+  file_type: string
+  storage_path: string
+  file_size_bytes: number | null
+  parsed_client_name: string | null
+  parsed_total_value_sek: number | null
+  parsed_start_date: string | null
+  parsed_end_date: string | null
+  parsed_payment_terms: string | null
+  parsed_deliverables: SowDeliverable[] | null
+  parsed_raw: unknown
+  parse_status: SowParseStatus
+  parse_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Invoice {
+  id: string
+  manual_revenue_item_id: string
+  sow_document_id: string | null
+  invoice_number: string
+  issue_date: string
+  due_date: string
+  amount_sek: number
+  payment_trigger: PaymentTrigger
+  milestone_label: string | null
+  status: InvoiceStatus
+  paid_date: string | null
+  notes: string | null
+  sort: number
+  created_at: string
+  updated_at: string
+}
+
+export interface InvoiceDraft {
+  id?: string
+  invoice_number: string
+  issue_date: string
+  due_date: string
+  amount_sek: number
+  payment_trigger: PaymentTrigger
+  milestone_label: string
+  status: InvoiceStatus
+  notes: string
+}
+
+export type SuggestionAction = 'add' | 'modify' | 'remove'
+export interface InvoiceSuggestion {
+  action: SuggestionAction
+  invoice_id?: string
+  draft: InvoiceDraft
+  reason: string
+}
+
 // ─── Derived view types used in /plan ─────────────────────────────────────────
 
 export interface RevenueRow {

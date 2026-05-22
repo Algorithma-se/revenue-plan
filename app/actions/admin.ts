@@ -47,6 +47,25 @@ export async function addAllowedEmail(email: string): Promise<void> {
   if (error) throw error
 }
 
+export async function getFeatureFlag(key: string): Promise<boolean> {
+  await requireAuth()
+  const { data } = await adminClient()
+    .from('feature_flags')
+    .select('enabled')
+    .eq('key', key)
+    .single()
+  return data?.enabled ?? true
+}
+
+export async function setFeatureFlag(key: string, enabled: boolean): Promise<void> {
+  await requireAuth()
+  const { error } = await adminClient()
+    .from('feature_flags')
+    .update({ enabled, updated_at: new Date().toISOString() })
+    .eq('key', key)
+  if (error) throw error
+}
+
 export async function removeAllowedEmail(email: string): Promise<void> {
   const user = await requireAuth()
   if (user.email?.toLowerCase() === email.toLowerCase()) {
