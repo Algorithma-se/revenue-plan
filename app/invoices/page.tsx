@@ -1,8 +1,6 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -44,7 +42,7 @@ function useOverdueCheck(invoices: Invoice[]) {
   return invoices.filter(i => i.status === 'sent' && i.due_date < today)
 }
 
-export default function InvoicesPage() {
+function InvoicesContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
@@ -489,5 +487,13 @@ export default function InvoicesPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function InvoicesPage() {
+  return (
+    <Suspense>
+      <InvoicesContent />
+    </Suspense>
   )
 }
