@@ -90,7 +90,7 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
 
     const prompt = `You are extracting invoicing data from a Statement of Work or services agreement. Your output drives invoice generation — precision matters. Reply ONLY with valid JSON, no markdown, no surrounding text.
 
-STEP 1 — Classify the invoicing model:
+STEP 1 — Classify the PRIMARY invoicing model (use the model that covers most of the contract value):
 • "milestone"          — fixed amounts triggered by completing specific deliverables or events
 • "time_and_materials" — periodic invoices = hours worked × hourly/daily rate
 • "capacity"           — recurring monthly fee for a dedicated team, FTE allocation, or retainer (same amount each period regardless of hours)
@@ -125,26 +125,35 @@ STEP 2 — Output this exact JSON structure:
   ]
 }
 
+CRITICAL — Rate period detection:
+Before filling any amount field, identify the stated billing period:
+  HOURLY rate  → hourly_rate_sek = rate × conversion. monthly_fee_sek = null unless separately stated.
+  DAILY rate   → hourly_rate_sek = daily_rate / 8 × conversion.
+  WEEKLY rate  → monthly_fee_sek = weekly_rate × 4.35 × conversion. hourly_rate_sek = weekly_rate / 40 × conversion.
+  MONTHLY rate → monthly_fee_sek = monthly_rate × conversion directly.
+  NEVER use a weekly, daily, or hourly figure as a monthly fee without conversion.
+
 Field rules:
-total_value_sek — convert to SEK (EUR≈11, USD≈10, GBP≈13). For capacity/T&M, total = monthly_fee × number_of_months if determinable.
+total_value_sek — convert to SEK (EUR≈11, USD≈10, GBP≈13). Use the stated total or upper-range estimate. If not stated, sum all deliverable amounts.
 currency — original contract currency code (SEK, EUR, USD, …).
-hourly_rate_sek — per-hour rate for T&M, converted to SEK. Null for capacity or fixed-fee contracts.
+hourly_rate_sek — per-hour rate converted to SEK. Set for T&M and as the additional-hours rate in capacity contracts. Null if no hourly rate exists.
 fte_count — number of dedicated consultants/FTEs if stated (e.g. "2 FTE", "team of 3"). Null otherwise.
-monthly_fee_sek — the recurring monthly amount for capacity/retainer. If not explicit, derive from total_value_sek ÷ contract_months.
+monthly_fee_sek — the MONTHLY billing amount after rate-period conversion (see above). For capacity: this is what gets invoiced each month. For partial first/last months, still store the full-month rate here; pro-rate in the deliverable amounts instead.
 invoice_timing (top-level) — the default timing for all invoices in this contract.
-deliverables — populate based on model:
-  • milestone: one entry per deliverable or payment event with its amount and trigger date.
-  • time_and_materials: one entry per billing period (usually per month) with estimated hours and computed amount = hours × hourly_rate_sek.
-  • capacity: one entry per billing period with amount = monthly_fee_sek.
-  • fixed_fee: one entry per payment instalment.
+deliverables — list EVERY invoice that should be raised, one entry per invoice event:
+  • If a contract has multiple phases or billing blocks (e.g. an initial T&M block followed by a capacity retainer), create separate deliverable entries for EACH invoice in EACH phase.
+  • capacity / retainer: one entry per calendar month in the contract period. For partial months (contract starts or ends mid-month), pro-rate: amount = monthly_fee_sek × (days_in_period / days_in_month).
+  • time_and_materials: one entry per billing period with hours and amount.
+  • milestone / fixed_fee: one entry per payment event.
+deliverables[].label — descriptive label, e.g. "May 2026 capacity", "Initial T&M — May 1–17", "Phase 1 milestone".
 deliverables[].invoice_date — the calendar date to issue the invoice:
   month_end → last calendar day of the billing month (e.g. 2026-05-31).
   month_start → first day of the billing month.
   specific_date → the stated date.
   on_completion → the deliverable's stated completion or due date; estimate if not given.
-deliverables[].amount_sek — for T&M: hours × hourly_rate_sek. For capacity: monthly_fee_sek. For others: stated amount. All in SEK.
-estimated_hours — for T&M only: hours for that period. Null for milestone/capacity/fixed_fee.
-monthly_hours — hours billable per calendar month for T&M or capacity estimation. For T&M: derive from contract or distribute total hours evenly. For capacity: fte_count × ~160 h/month per FTE. Empty array for milestone/fixed_fee if hours are irrelevant.
+deliverables[].amount_sek — amount in SEK for this specific invoice. For capacity: pro-rated monthly_fee_sek if partial month, else full monthly_fee_sek. For T&M: hours × hourly_rate_sek. All converted to SEK.
+estimated_hours — for T&M only: hours for that period. Null for capacity/milestone/fixed_fee.
+monthly_hours — hours billable per calendar month. For T&M: from contract or distribute total hours. For capacity: fte_count × 160 h/month per FTE. Empty for milestone/fixed_fee.
 Use null for any field that cannot be determined.`
 
     let messageContent: Anthropic.MessageParam['content']
@@ -166,7 +175,7 @@ Use null for any field that cannot be determined.`
 
     const message = await client.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages:   [{ role: 'user', content: messageContent }],
     })
 

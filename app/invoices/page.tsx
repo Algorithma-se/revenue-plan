@@ -251,6 +251,31 @@ function InvoicesContent() {
     ? Number(latestSow.parsed_total_value_sek) : null
   const latestRaw = latestSow?.parsed_raw as SowParsedRaw | null
 
+  // Derive Invoice-shaped objects from current drafts so the per-item chart
+  // reflects deletions/edits immediately without requiring Save first.
+  const chartInvoices: Invoice[] = drafts
+    .filter(d => d.issue_date && d.amount_sek > 0)
+    .map((d, i) => {
+      const saved = invoices.find(inv => inv.id === d.id)
+      return {
+        id:                     d.id ?? `draft-${i}`,
+        manual_revenue_item_id: selectedId ?? '',
+        sow_document_id:        saved?.sow_document_id ?? null,
+        invoice_number:         d.invoice_number,
+        issue_date:             d.issue_date,
+        due_date:               d.due_date,
+        amount_sek:             d.amount_sek,
+        payment_trigger:        d.payment_trigger,
+        milestone_label:        d.milestone_label || null,
+        status:                 d.status,
+        paid_date:              saved?.paid_date ?? null,
+        notes:                  d.notes || null,
+        sort:                   i,
+        created_at:             '',
+        updated_at:             '',
+      }
+    })
+
   const MODEL_LABEL: Record<string, string> = {
     milestone: 'Milestone', time_and_materials: 'T&M',
     capacity: 'Capacity', fixed_fee: 'Fixed fee',
@@ -611,11 +636,11 @@ function InvoicesContent() {
                 </div>
 
                 {/* Per-client cash flow chart */}
-                {(Object.keys(planCells).length > 0 || invoices.length > 0) && (
+                {(Object.keys(planCells).length > 0 || drafts.length > 0) && (
                   <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 shadow-sm">
                     <SowCashFlowChart
                       planCells={planCells}
-                      invoices={invoices}
+                      invoices={chartInvoices}
                       months={ROLLING_MONTHS}
                       title={`Cash flow — ${selectedItem?.clientName ?? ''}`}
                     />
