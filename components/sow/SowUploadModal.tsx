@@ -118,7 +118,7 @@ export function SowUploadModal({ itemId, clientName, onDone, onClose }: Props) {
           />
           {file ? (
             <div>
-              <p className="text-sm font-medium text-[#0F0F0F]">{file.name}</p>
+              <p className="text-xs font-medium text-[#0F0F0F] break-all">{file.name}</p>
               <p className="text-xs text-[#9CA3AF] mt-1">{(file.size / 1024).toFixed(0)} KB</p>
             </div>
           ) : (
