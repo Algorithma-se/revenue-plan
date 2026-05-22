@@ -45,6 +45,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
   const total = drafts.reduce((s, d) => s + (d.amount_sek || 0), 0)
   const diff  = contractValueSek != null ? total - contractValueSek : null
 
+  const thCls  = 'py-2 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider'
   const cellCls = 'px-2 py-1.5'
   const inputCls = 'w-full text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white'
 
@@ -62,15 +63,15 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
             <col className="w-[3%]"  /> {/* Delete */}
           </colgroup>
           <thead>
-            <tr className="bg-[#F8FAFC] border-b border-[#E5E7EB]">
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">#</th>
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Issue date</th>
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Due date</th>
-              <th className="px-2 py-2 text-right font-semibold text-[#64748B]">kSEK</th>
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Milestone</th>
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Status</th>
-              <th className="px-2 py-2 text-left font-semibold text-[#64748B]">Notes</th>
-              <th className="px-1 py-2" />
+            <tr className="border-b border-[#F3F4F6]">
+              <th className={`${thCls} pl-5 pr-2 text-left`}>#</th>
+              <th className={`${thCls} px-2 text-left`}>Issue date</th>
+              <th className={`${thCls} px-2 text-left`}>Due date</th>
+              <th className={`${thCls} px-2 text-right`}>kSEK</th>
+              <th className={`${thCls} px-2 text-left`}>Milestone</th>
+              <th className={`${thCls} px-2 text-left`}>Status</th>
+              <th className={`${thCls} px-2 text-left`}>Notes</th>
+              <th className="py-2" />
             </tr>
           </thead>
           <tbody>
@@ -78,7 +79,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
               const saved = idMap.get(d.invoice_number)
               return (
                 <tr key={i} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#F9FAFB]">
-                  <td className={cellCls}>
+                  <td className="pl-5 pr-2 py-1.5">
                     <input
                       value={d.invoice_number}
                       onChange={e => update(i, { invoice_number: e.target.value })}
@@ -159,7 +160,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
           </tbody>
       </table>
 
-      <div className="flex items-center justify-between px-4 py-3 border-t border-[#F3F4F6]">
+      <div className="flex items-center justify-between px-5 py-3 border-t border-[#F3F4F6]">
         <button
           onClick={addRow}
           className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#2563EB] transition-colors"
