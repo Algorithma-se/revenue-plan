@@ -107,7 +107,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
                       type="number"
                       value={d.amount_sek ? Math.round(d.amount_sek / 1000) : ''}
                       onChange={e => update(i, { amount_sek: Number(e.target.value) * 1000 })}
-                      className={`${inputCls} text-right`}
+                      className="w-full text-xs text-right border border-transparent focus:border-[#E5E7EB] rounded bg-transparent focus:bg-white py-0.5 px-0 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       placeholder="0"
                     />
                   </td>
