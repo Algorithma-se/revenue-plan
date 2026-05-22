@@ -88,19 +88,33 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
     const buffer = Buffer.from(await fileBytes.arrayBuffer())
     const client = new Anthropic({ apiKey })
 
-    const prompt = `You are analysing a Statement of Work (SOW). Extract all relevant details and reply ONLY with valid JSON — no markdown, no explanation, no surrounding text.
+    const prompt = `You are extracting invoicing data from a Statement of Work or services agreement. Your output drives invoice generation — precision matters. Reply ONLY with valid JSON, no markdown, no surrounding text.
+
+STEP 1 — Classify the invoicing model:
+• "milestone"          — fixed amounts triggered by completing specific deliverables or events
+• "time_and_materials" — periodic invoices = hours worked × hourly/daily rate
+• "capacity"           — recurring monthly fee for a dedicated team, FTE allocation, or retainer (same amount each period regardless of hours)
+• "fixed_fee"          — one or a few lump-sum payments on specific dates, not tied to milestones
+
+STEP 2 — Output this exact JSON structure:
 
 {
   "client_name": string | null,
+  "invoicing_model": "milestone" | "time_and_materials" | "capacity" | "fixed_fee" | null,
   "total_value_sek": number | null,
   "currency": string | null,
-  "hourly_rate_sek": number | null,
   "start_date": "YYYY-MM-DD" | null,
   "end_date": "YYYY-MM-DD" | null,
   "payment_terms": string | null,
+  "hourly_rate_sek": number | null,
+  "fte_count": number | null,
+  "monthly_fee_sek": number | null,
+  "invoice_timing": "month_end" | "month_start" | "specific_date" | "on_completion" | null,
   "deliverables": [
     {
       "label": string,
+      "invoice_date": "YYYY-MM-DD" | null,
+      "invoice_timing": "month_end" | "month_start" | "specific_date" | "on_completion" | null,
       "due_date": "YYYY-MM-DD" | null,
       "amount_sek": number | null,
       "estimated_hours": number | null
@@ -111,14 +125,27 @@ export async function parseSow(sowId: string): Promise<{ data?: SowDocument; err
   ]
 }
 
-Rules:
-- total_value_sek: convert to SEK if another currency is used (use approximate rates).
-- currency: the original contract currency, e.g. "SEK", "EUR", "USD".
-- hourly_rate_sek: extract if the contract is time-and-materials or mentions a rate per hour.
-- deliverables[].amount_sek: look for an explicit amount per milestone or invoice. If the total is split evenly across deliverables, compute total_value_sek / n. If scope descriptions imply unequal effort, distribute proportionally.
-- deliverables[].estimated_hours: extract if stated; if hourly_rate_sek is known, derive from amount_sek / rate; otherwise estimate from scope descriptions.
-- monthly_hours: estimate billable hours per calendar month across the project duration. Use workload descriptions, team size, sprint plans, or total hours if mentioned. If hourly_rate_sek is known, derive each month's hours from that month's invoiced amount / rate. If nothing is stated, distribute total effort evenly across months between start_date and end_date.
-- Use null for any field that cannot be determined.`
+Field rules:
+total_value_sek — convert to SEK (EUR≈11, USD≈10, GBP≈13). For capacity/T&M, total = monthly_fee × number_of_months if determinable.
+currency — original contract currency code (SEK, EUR, USD, …).
+hourly_rate_sek — per-hour rate for T&M, converted to SEK. Null for capacity or fixed-fee contracts.
+fte_count — number of dedicated consultants/FTEs if stated (e.g. "2 FTE", "team of 3"). Null otherwise.
+monthly_fee_sek — the recurring monthly amount for capacity/retainer. If not explicit, derive from total_value_sek ÷ contract_months.
+invoice_timing (top-level) — the default timing for all invoices in this contract.
+deliverables — populate based on model:
+  • milestone: one entry per deliverable or payment event with its amount and trigger date.
+  • time_and_materials: one entry per billing period (usually per month) with estimated hours and computed amount = hours × hourly_rate_sek.
+  • capacity: one entry per billing period with amount = monthly_fee_sek.
+  • fixed_fee: one entry per payment instalment.
+deliverables[].invoice_date — the calendar date to issue the invoice:
+  month_end → last calendar day of the billing month (e.g. 2026-05-31).
+  month_start → first day of the billing month.
+  specific_date → the stated date.
+  on_completion → the deliverable's stated completion or due date; estimate if not given.
+deliverables[].amount_sek — for T&M: hours × hourly_rate_sek. For capacity: monthly_fee_sek. For others: stated amount. All in SEK.
+estimated_hours — for T&M only: hours for that period. Null for milestone/capacity/fixed_fee.
+monthly_hours — hours billable per calendar month for T&M or capacity estimation. For T&M: derive from contract or distribute total hours evenly. For capacity: fte_count × ~160 h/month per FTE. Empty array for milestone/fixed_fee if hours are irrelevant.
+Use null for any field that cannot be determined.`
 
     let messageContent: Anthropic.MessageParam['content']
 

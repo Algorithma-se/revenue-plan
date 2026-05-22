@@ -96,11 +96,17 @@ export type SowParseStatus  = 'pending' | 'parsing' | 'done' | 'error'
 export type SowDocumentType = 'original' | 'amendment' | 'change_request'
 export type InvoiceStatus   = 'draft' | 'sent' | 'paid' | 'overdue'
 export type PaymentTrigger  = 'date' | 'milestone'
+export type InvoicingModel = 'milestone' | 'time_and_materials' | 'capacity' | 'fixed_fee'
+export type InvoiceTiming  = 'month_end' | 'month_start' | 'specific_date' | 'on_completion'
+
 export interface SowDeliverable {
   label: string
   due_date: string | null
   amount_sek: number | null
   estimated_hours: number | null
+  // Richer fields from improved parser:
+  invoice_date: string | null       // computed date to issue the invoice
+  invoice_timing: InvoiceTiming | null
 }
 
 export interface SowMonthlyHours {
@@ -110,9 +116,13 @@ export interface SowMonthlyHours {
 
 export interface SowParsedRaw {
   client_name: string | null
+  invoicing_model: InvoicingModel | null
   total_value_sek: number | null
   currency: string | null
   hourly_rate_sek: number | null
+  fte_count: number | null
+  monthly_fee_sek: number | null
+  invoice_timing: InvoiceTiming | null
   start_date: string | null
   end_date: string | null
   payment_terms: string | null

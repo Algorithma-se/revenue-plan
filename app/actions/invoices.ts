@@ -2,7 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase-server'
-import type { Invoice, InvoiceDraft, InvoiceStatus, InvoiceSuggestion, SowDeliverable } from '@/types/database'
+import type { Invoice, InvoiceDraft, InvoiceStatus, InvoiceSuggestion, SowDeliverable, SowParsedRaw } from '@/types/database'
 
 export async function getInvoices(itemId: string): Promise<Invoice[]> {
   const supabase = await createServerSupabase()
@@ -59,45 +59,53 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
   if (error || !sow) throw new Error('SOW document not found')
   if (sow.parse_status !== 'done') throw new Error('SOW has not been parsed yet')
 
-  const itemId   = sow.manual_revenue_item_id
-  const total    = Number(sow.parsed_total_value_sek ?? 0)
-  const start    = sow.parsed_start_date ? new Date(sow.parsed_start_date) : new Date()
-  const end      = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
-  const terms    = (sow.parsed_payment_terms ?? '').toLowerCase()
-  const termDays = parsePaymentTermsDays(terms)
-  const deliverables: SowDeliverable[] = (sow.parsed_deliverables ?? []) as SowDeliverable[]
-  const year     = start.getFullYear()
+  const itemId       = sow.manual_revenue_item_id
+  const raw          = sow.parsed_raw as SowParsedRaw | null
+  const total        = Number(sow.parsed_total_value_sek ?? 0)
+  const start        = sow.parsed_start_date ? new Date(sow.parsed_start_date) : new Date()
+  const end          = sow.parsed_end_date   ? new Date(sow.parsed_end_date)   : null
+  const termDays     = parsePaymentTermsDays((sow.parsed_payment_terms ?? '').toLowerCase())
+  const deliverables = (sow.parsed_deliverables ?? []) as SowDeliverable[]
+  const model        = raw?.invoicing_model ?? null
+  const hourlyRate   = raw?.hourly_rate_sek ?? null
+  const monthlyFee   = raw?.monthly_fee_sek ?? null
+  const monthlyHours = raw?.monthly_hours ?? []
+  const year         = start.getFullYear()
 
   const drafts: Omit<Invoice, 'id' | 'created_at' | 'updated_at'>[] = []
 
-  // If deliverables have explicit amounts, use them; otherwise divide total evenly
-  const deliverablesHaveAmounts = deliverables.length > 0 &&
-    deliverables.every(d => d.amount_sek != null && d.amount_sek > 0)
-  const fallbackAmount = deliverables.length > 0 ? total / deliverables.length : total
-
-  if (deliverables.length > 0) {
-    deliverables.forEach((d, i) => {
-      const issueDate = d.due_date ? new Date(d.due_date) : addDays(start, 30 * (i + 1))
+  // ── time_and_materials with monthly_hours ──────────────────────────────
+  if (model === 'time_and_materials' && hourlyRate && monthlyHours.length > 0) {
+    monthlyHours.forEach((mh, i) => {
+      const [y, m] = mh.month.split('-').map(Number)
+      const issueDate = lastDayOfMonth(new Date(y, m - 1, 1))
+      const amount    = Math.round(mh.hours * hourlyRate)
       drafts.push({
         manual_revenue_item_id: itemId,
         sow_document_id:        sowId,
         invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
         issue_date:             toIso(issueDate),
         due_date:               toIso(addDays(issueDate, termDays)),
-        amount_sek:             deliverablesHaveAmounts ? d.amount_sek! : fallbackAmount,
-        payment_trigger:        'milestone',
-        milestone_label:        d.label,
+        amount_sek:             amount,
+        payment_trigger:        'date',
+        milestone_label:        `${mh.month} — ${mh.hours} h × ${Math.round(hourlyRate).toLocaleString('sv-SE')} kr/h`,
         status:                 'draft',
         paid_date:              null,
         notes:                  null,
         sort:                   i,
       })
     })
-  } else if (terms.includes('month') && end) {
-    const months = monthsBetween(start, end)
-    const perMonth = months > 0 ? total / months : total
-    for (let i = 0; i < months; i++) {
-      const issueDate = addMonths(start, i + 1)
+
+  // ── capacity / retainer ────────────────────────────────────────────────
+  } else if ((model === 'capacity' || model === 'time_and_materials') && end) {
+    const numMonths = monthsBetween(start, end)
+    const perMonth  = monthlyFee ?? (numMonths > 0 ? total / numMonths : total)
+    const timing    = raw?.invoice_timing ?? 'month_end'
+    for (let i = 0; i < numMonths; i++) {
+      const periodStart = addMonths(start, i)
+      const issueDate   = timing === 'month_start'
+        ? periodStart
+        : lastDayOfMonth(periodStart)
       drafts.push({
         manual_revenue_item_id: itemId,
         sow_document_id:        sowId,
@@ -113,6 +121,53 @@ export async function generateInvoiceSchedule(sowId: string): Promise<Invoice[]>
         sort:                   i,
       })
     }
+
+  // ── milestone / fixed_fee with deliverables ────────────────────────────
+  } else if (deliverables.length > 0) {
+    const fallback    = total / deliverables.length
+    deliverables.forEach((d, i) => {
+      const issueDate = resolveInvoiceDate(d, start, i)
+      const amount    = d.amount_sek ?? fallback
+      const isMilestone = !!(d.label && d.invoice_timing === 'on_completion')
+      drafts.push({
+        manual_revenue_item_id: itemId,
+        sow_document_id:        sowId,
+        invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
+        issue_date:             toIso(issueDate),
+        due_date:               toIso(addDays(issueDate, termDays)),
+        amount_sek:             amount,
+        payment_trigger:        isMilestone ? 'milestone' : 'date',
+        milestone_label:        isMilestone ? d.label : null,
+        status:                 'draft',
+        paid_date:              null,
+        notes:                  null,
+        sort:                   i,
+      })
+    })
+
+  // ── monthly fallback (terms mention "month") ───────────────────────────
+  } else if (end) {
+    const numMonths = monthsBetween(start, end)
+    const perMonth  = numMonths > 0 ? total / numMonths : total
+    for (let i = 0; i < numMonths; i++) {
+      const issueDate = lastDayOfMonth(addMonths(start, i))
+      drafts.push({
+        manual_revenue_item_id: itemId,
+        sow_document_id:        sowId,
+        invoice_number:         `${year}-INV-${String(i + 1).padStart(3, '0')}`,
+        issue_date:             toIso(issueDate),
+        due_date:               toIso(addDays(issueDate, termDays)),
+        amount_sek:             perMonth,
+        payment_trigger:        'date',
+        milestone_label:        null,
+        status:                 'draft',
+        paid_date:              null,
+        notes:                  null,
+        sort:                   i,
+      })
+    }
+
+  // ── single invoice fallback ────────────────────────────────────────────
   } else {
     drafts.push({
       manual_revenue_item_id: itemId,
@@ -283,7 +338,22 @@ export async function getAggregatedCashFlow(): Promise<{
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function lastDayOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0)
+}
+
+function resolveInvoiceDate(d: SowDeliverable, start: Date, idx: number): Date {
+  if (d.invoice_date) return new Date(d.invoice_date)
+  if (d.invoice_timing === 'month_end') return lastDayOfMonth(addMonths(start, idx))
+  if (d.invoice_timing === 'month_start') return addMonths(start, idx)
+  if (d.due_date) return new Date(d.due_date)
+  return addDays(start, 30 * (idx + 1))
 }
 
 // Parse "Net 30", "30 days", "60 dagar", "net 45 days", etc. → number of days
