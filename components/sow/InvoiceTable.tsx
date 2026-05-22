@@ -45,9 +45,9 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
   const total = drafts.reduce((s, d) => s + (d.amount_sek || 0), 0)
   const diff  = contractValueSek != null ? total - contractValueSek : null
 
-  const thCls  = 'py-2 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider'
-  const cellCls = 'px-2 py-1.5'
-  const inputCls = 'w-full text-xs border border-transparent focus:border-[#E5E7EB] rounded px-1 py-0.5 bg-transparent focus:bg-white'
+  const thCls   = 'px-3 py-2 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider'
+  const cellCls = 'px-3 py-1.5'
+  const inputCls = 'w-full text-xs border border-transparent focus:border-[#E5E7EB] rounded bg-transparent focus:bg-white px-0 focus:px-1 py-0.5'
 
   return (
     <div>
@@ -63,14 +63,14 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
             <col className="w-[3%]"  /> {/* Delete */}
           </colgroup>
           <thead>
-            <tr className="border-b border-[#F3F4F6]">
-              <th className={`${thCls} pl-5 pr-2 text-left`}>#</th>
-              <th className={`${thCls} px-2 text-left`}>Issue date</th>
-              <th className={`${thCls} px-2 text-left`}>Due date</th>
-              <th className={`${thCls} px-2 text-right`}>kSEK</th>
-              <th className={`${thCls} px-2 text-left`}>Milestone</th>
-              <th className={`${thCls} px-2 text-left`}>Status</th>
-              <th className={`${thCls} px-2 text-left`}>Notes</th>
+            <tr className="bg-[#F3F4F6] border-b border-[#E5E7EB]">
+              <th className={`${thCls} text-left`}>#</th>
+              <th className={`${thCls} text-left`}>Issue date</th>
+              <th className={`${thCls} text-left`}>Due date</th>
+              <th className={`${thCls} text-right`}>kSEK</th>
+              <th className={`${thCls} text-left`}>Milestone</th>
+              <th className={`${thCls} text-left`}>Status</th>
+              <th className={`${thCls} text-left`}>Notes</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -79,7 +79,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
               const saved = idMap.get(d.invoice_number)
               return (
                 <tr key={i} className="border-b border-[#F3F4F6] last:border-0 hover:bg-[#F9FAFB]">
-                  <td className="pl-5 pr-2 py-1.5">
+                  <td className={cellCls}>
                     <input
                       value={d.invoice_number}
                       onChange={e => update(i, { invoice_number: e.target.value })}
