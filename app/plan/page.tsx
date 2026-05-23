@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   getFiscalMonths, fyLabel, currentFyStart,
@@ -36,6 +36,7 @@ export default function PlanPage() {
   const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
   const [fyStart, setFyStart] = useState(currentFyStart)
+  const didInitialSort        = useRef(false)
 
   const months = getFiscalMonths(fyStart)
 
@@ -77,7 +78,21 @@ export default function PlanPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    async function init() {
+      await load()
+      if (!didInitialSort.current) {
+        didInitialSort.current = true
+        const { data: items } = await supabase.from('manual_revenue_items').select('pod_id')
+        if (items?.length) {
+          const podIds = new Set<string | null>(items.map((i: { pod_id: string | null }) => i.pod_id ?? null))
+          await Promise.all([...podIds].map(pid => resortPodByName(pid)))
+          await load()
+        }
+      }
+    }
+    init()
+  }, [load])
 
   // ── Optimistic updaters ──────────────────────────────────────────────────────
 
