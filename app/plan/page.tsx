@@ -109,6 +109,19 @@ export default function PlanPage() {
 
   // ── CRUD operations ──────────────────────────────────────────────────────────
 
+  async function resortPodByName(podId: string | null) {
+    let q = supabase.from('manual_revenue_items').select('id, client_name')
+    q = podId === null ? q.is('pod_id', null) : q.eq('pod_id', podId)
+    const { data: items } = await q
+    if (!items || items.length === 0) return
+    const sorted = [...items].sort((a, b) =>
+      (a.client_name ?? '').toLowerCase().localeCompare((b.client_name ?? '').toLowerCase())
+    )
+    await Promise.all(sorted.map((item, i) =>
+      supabase.from('manual_revenue_items').update({ sort: i }).eq('id', item.id)
+    ))
+  }
+
   async function addManualItem(
     podId: string | null,
     clientName: string,
@@ -116,9 +129,18 @@ export default function PlanPage() {
     notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
   ) {
+    // Count existing items in the same pod with the same client name
+    let dupQ = supabase.from('manual_revenue_items').select('id', { count: 'exact', head: true })
+      .ilike('client_name', clientName)
+    dupQ = podId === null ? dupQ.is('pod_id', null) : dupQ.eq('pod_id', podId)
+    const { count: dupeCount } = await dupQ
+    let finalNotes = notes
+    if ((dupeCount ?? 0) === 1) finalNotes = notes ? `${notes} (on top)` : '(on top)'
+    else if ((dupeCount ?? 0) >= 2) finalNotes = notes ? `${notes} (more on top)` : '(more on top)'
+
     const { data, error } = await supabase
       .from('manual_revenue_items')
-      .insert({ pod_id: podId, client_name: clientName, project, notes, sort: Math.floor(Date.now() / 1000) })
+      .insert({ pod_id: podId, client_name: clientName, project, notes: finalNotes, sort: 0 })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add item')
@@ -129,6 +151,7 @@ export default function PlanPage() {
         .from('plan_revenue_cells')
         .insert(cells.map(c => ({ manual_revenue_item_id: newItem.id, month: c.month, amount: c.amount, status: c.status })))
     }
+    await resortPodByName(podId)
     await load()
   }
 
@@ -140,6 +163,10 @@ export default function PlanPage() {
     notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
   ) {
+    const { data: current } = await supabase
+      .from('manual_revenue_items').select('pod_id').eq('id', itemId).single()
+    const oldPodId = current?.pod_id ?? null
+
     await supabase
       .from('manual_revenue_items')
       .update({ client_name: clientName, project, pod_id: podId, notes })
@@ -159,6 +186,8 @@ export default function PlanPage() {
     } else {
       await supabase.from('plan_revenue_cells').delete().eq('manual_revenue_item_id', itemId)
     }
+    await resortPodByName(podId)
+    if (oldPodId !== podId) await resortPodByName(oldPodId)
     await load()
   }
 
