@@ -4,9 +4,9 @@ import type { PlanStatus } from '@/types/database'
 import { cycleStatus } from '@/lib/plan-utils'
 
 const COLORS: Record<PlanStatus, string> = {
-  A: 'bg-[#F0FDF4] text-[#16A34A]',
-  B: 'bg-[#EFF6FF] text-[#3B82F6]',
-  F: 'bg-[#F3F4F6] text-[#6B7280]',
+  A: 'bg-[#16A34A] text-white',
+  B: 'bg-[#2563EB] text-white',
+  F: 'bg-[#9CA3AF] text-white',
 }
 
 export function StatusBadge({

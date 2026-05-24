@@ -37,7 +37,10 @@ export function EditableCell({
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
 
-  const agingBg = isAging && amount > 0 && !editing ? 'bg-[#FFFBEB]' : ''
+  const STATUS_BG: Record<string, string> = { A: 'bg-[#F0FDF4]', B: 'bg-[#EFF6FF]', F: '' }
+  const cellBg = isAging && amount > 0 && !editing
+    ? 'bg-[#FFFBEB]'
+    : amount > 0 && !editing ? (STATUS_BG[status] ?? '') : ''
 
   if (editing) {
     return (
@@ -59,7 +62,7 @@ export function EditableCell({
   }
 
   return (
-    <div className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] ${agingBg} transition-colors`}>
+    <div className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] ${cellBg} transition-colors`}>
       <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} />
       <div
         onClick={startEdit}
