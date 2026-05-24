@@ -13,11 +13,16 @@ export function StatusBadge({
   status,
   onCycle,
   readonly,
+  isEmpty,
 }: {
   status: PlanStatus
   onCycle?: (next: PlanStatus) => void
   readonly?: boolean
+  isEmpty?: boolean
 }) {
+  const colorClass = status === 'F' && isEmpty
+    ? 'bg-white text-[#D1D5DB] border border-[#E5E7EB]'
+    : COLORS[status]
   return (
     <span
       onClick={e => {
@@ -26,7 +31,7 @@ export function StatusBadge({
         onCycle?.(cycleStatus(status))
       }}
       className={`inline-block text-[9px] font-bold px-1 py-0.5 rounded leading-none select-none
-        ${COLORS[status]}
+        ${colorClass}
         ${readonly ? '' : 'cursor-pointer hover:opacity-70 transition-opacity'}`}
     >
       {status}

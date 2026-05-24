@@ -63,7 +63,7 @@ export function EditableCell({
 
   return (
     <div className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] ${cellBg} transition-colors`}>
-      <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} />
+      <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} isEmpty={amount === 0} />
       <div
         onClick={startEdit}
         className={`text-right text-xs leading-none min-w-[36px]
