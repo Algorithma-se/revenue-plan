@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
+import { JOracleLogo } from '@/components/JOracleLogo'
 
 function LoginCard() {
   const searchParams = useSearchParams()
@@ -52,12 +53,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#F9F9F8] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Algorithma" className="w-7 h-7" style={{ color: '#61b5cc' }} />
-          <span className="font-semibold text-[15px] tracking-tight text-[#0F0F0F]">
-            algorithma
-            <span className="text-[#6B7280] font-normal ml-1.5">| Revenue Plan</span>
-          </span>
+          <JOracleLogo />
+          <span className="text-[#9CA3AF] font-light text-sm">| by Algorithma</span>
         </div>
 
         <Suspense fallback={<div className="bg-white rounded-2xl border border-[#EBEBEB] p-8 shadow-sm h-40 animate-pulse" />}>

@@ -4,7 +4,7 @@ import { FeatureFlagsProvider } from '@/components/FeatureFlagsProvider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Algorithma Revenue Plan',
+  title: 'JOracle by Algorithma',
   description: 'Revenue forecasting and P&L allocation',
 }
 

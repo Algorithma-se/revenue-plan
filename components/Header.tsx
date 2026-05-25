@@ -62,7 +62,7 @@ export default function Header() {
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2.5">
             <JOracleLogo />
-            <span className="text-[#9CA3AF] font-light text-sm hidden sm:inline">by Algorithma</span>
+            <span className="text-[#9CA3AF] font-light text-sm hidden sm:inline">| by Algorithma</span>
           </div>
 
           {/* Desktop nav */}
