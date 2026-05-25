@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useFeatureFlags } from '@/components/FeatureFlagsProvider'
+import { JOracleLogo } from '@/components/JOracleLogo'
 
 interface UserInfo {
   email:  string | null
@@ -60,18 +61,8 @@ export default function Header() {
         {/* Wordmark */}
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2.5">
-            <Image
-              src="/logo.svg"
-              alt="Algorithma"
-              width={24}
-              height={24}
-              className="w-6 h-6 flex-shrink-0"
-              unoptimized
-            />
-            <span className="font-semibold text-[14px] tracking-tight text-[#0F0F0F]">
-              algorithma
-              <span className="text-[#6B7280] font-normal ml-1.5 hidden sm:inline">| Revenue Plan</span>
-            </span>
+            <JOracleLogo />
+            <span className="text-[#9CA3AF] font-light text-sm hidden sm:inline">by Algorithma</span>
           </div>
 
           {/* Desktop nav */}
