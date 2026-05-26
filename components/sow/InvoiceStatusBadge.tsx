@@ -24,15 +24,12 @@ interface Props {
 }
 
 export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Props) {
-  const [saving, setSaving]         = useState(false)
-  const [showDate, setShowDate]     = useState(false)
-  const [dateVal, setDateVal]       = useState(paidDate ?? '')
+  const [saving, setSaving] = useState(false)
 
   const cfg  = CONFIG[status] ?? CONFIG.draft
   const next = CYCLE[status] ?? 'draft'
 
   async function cycle() {
-    if (next === 'paid') { setShowDate(true); return }
     setSaving(true)
     try {
       await updateInvoiceStatus(invoiceId, next, undefined)
@@ -40,39 +37,6 @@ export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Pr
     } finally {
       setSaving(false)
     }
-  }
-
-  async function confirmPaid() {
-    setSaving(true)
-    try {
-      await updateInvoiceStatus(invoiceId, 'paid', dateVal || undefined)
-      onChange('paid', dateVal || null)
-      setShowDate(false)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (showDate) {
-    return (
-      <div className="flex items-center gap-1">
-        <input
-          type="date"
-          value={dateVal}
-          onChange={e => setDateVal(e.target.value)}
-          className="text-xs border border-[#E5E7EB] rounded px-1.5 py-0.5 w-28"
-          autoFocus
-        />
-        <button
-          onClick={confirmPaid}
-          disabled={saving}
-          className="text-xs px-2 py-0.5 bg-[#16A34A] text-white rounded hover:bg-[#15803D] transition-colors disabled:opacity-50"
-        >
-          {saving ? '…' : '✓'}
-        </button>
-        <button onClick={() => setShowDate(false)} className="text-xs text-[#9CA3AF] hover:text-[#6B7280]">✕</button>
-      </div>
-    )
   }
 
   return (
