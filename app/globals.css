@@ -19,3 +19,8 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+@keyframes scrollPills {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
