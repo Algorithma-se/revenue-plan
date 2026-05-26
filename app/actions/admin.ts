@@ -79,26 +79,30 @@ export async function removeAllowedEmail(email: string): Promise<void> {
   if (error) throw error
 }
 
-export async function getAppSetting(setting: string): Promise<string | null> {
+export async function getAppSetting(column: string): Promise<string | null> {
   try {
     await requireAuth()
     const { data } = await createAdminSupabase()
       .from('app_settings')
-      .select('value')
-      .eq('setting_key', setting)
+      .select(column)
+      .limit(1)
       .maybeSingle()
-    return data?.value ?? null
+    return (data as Record<string, string> | null)?.[column] ?? null
   } catch {
     return null
   }
 }
 
-export async function setAppSetting(setting: string, value: string): Promise<{ error?: string }> {
+export async function setAppSetting(column: string, value: string): Promise<{ error?: string }> {
   try {
     await requireAuth()
-    const { error } = await createAdminSupabase()
+    const admin = createAdminSupabase()
+    const { data: row } = await admin.from('app_settings').select('id').limit(1).maybeSingle()
+    if (!row?.id) return { error: 'Settings row not found' }
+    const { error } = await admin
       .from('app_settings')
-      .upsert({ setting_key: setting, value, updated_at: new Date().toISOString() }, { onConflict: 'setting_key' })
+      .update({ [column]: value, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
     if (error) return { error: error.message }
     return {}
   } catch (e) {
