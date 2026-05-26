@@ -468,7 +468,7 @@ export async function sendGoogleChatNotification(
     const { data: setting } = await admin
       .from('app_settings')
       .select('value')
-      .eq('key', 'google_chat_webhook_url')
+      .eq('setting_key', 'google_chat_webhook_url')
       .maybeSingle()
     const webhookUrl = setting?.value
     if (!webhookUrl) return { error: 'Google Chat webhook URL not configured. Add it in Admin settings.' }

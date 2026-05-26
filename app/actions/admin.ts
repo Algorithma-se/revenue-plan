@@ -79,13 +79,13 @@ export async function removeAllowedEmail(email: string): Promise<void> {
   if (error) throw error
 }
 
-export async function getAppSetting(key: string): Promise<string | null> {
+export async function getAppSetting(setting: string): Promise<string | null> {
   try {
     await requireAuth()
     const { data } = await createAdminSupabase()
       .from('app_settings')
       .select('value')
-      .eq('key', key)
+      .eq('setting_key', setting)
       .maybeSingle()
     return data?.value ?? null
   } catch {
@@ -93,12 +93,12 @@ export async function getAppSetting(key: string): Promise<string | null> {
   }
 }
 
-export async function setAppSetting(key: string, value: string): Promise<{ error?: string }> {
+export async function setAppSetting(setting: string, value: string): Promise<{ error?: string }> {
   try {
     await requireAuth()
     const { error } = await createAdminSupabase()
       .from('app_settings')
-      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      .upsert({ setting_key: setting, value, updated_at: new Date().toISOString() }, { onConflict: 'setting_key' })
     if (error) return { error: error.message }
     return {}
   } catch (e) {
