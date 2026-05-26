@@ -2,6 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { createAdminSupabase } from '@/lib/supabase-admin'
 import type { Invoice, InvoiceDraft, InvoiceStatus, InvoiceSuggestion, SowDeliverable, SowParsedRaw } from '@/types/database'
 
 export async function getInvoices(itemId: string): Promise<Invoice[]> {
@@ -457,4 +458,28 @@ function alignDeliverablesToStart(deliverables: SowDeliverable[], start: Date): 
     invoice_date: d.invoice_date ? shiftIso(d.invoice_date, deltaMs) : d.invoice_date,
     due_date:     d.due_date     ? shiftIso(d.due_date,     deltaMs) : d.due_date,
   }))
+}
+
+export async function sendGoogleChatNotification(
+  message: string,
+): Promise<{ error?: string }> {
+  try {
+    const admin = createAdminSupabase()
+    const { data: setting } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'google_chat_webhook_url')
+      .maybeSingle()
+    const webhookUrl = setting?.value
+    if (!webhookUrl) return { error: 'Google Chat webhook URL not configured. Add it in Admin settings.' }
+    const res = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text: message }),
+    })
+    if (!res.ok) return { error: `Webhook returned ${res.status}: ${res.statusText}` }
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to send notification' }
+  }
 }

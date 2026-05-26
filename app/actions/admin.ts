@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createServerSupabase } from '@/lib/supabase-server'
+import { createAdminSupabase } from '@/lib/supabase-admin'
 
 function adminClient() {
   return createClient(
@@ -75,5 +76,23 @@ export async function removeAllowedEmail(email: string): Promise<void> {
     .from('allowed_emails')
     .delete()
     .eq('email', email)
+  if (error) throw error
+}
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  await requireAuth()
+  const { data } = await createAdminSupabase()
+    .from('app_settings')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle()
+  return data?.value ?? null
+}
+
+export async function setAppSetting(key: string, value: string): Promise<void> {
+  await requireAuth()
+  const { error } = await createAdminSupabase()
+    .from('app_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
   if (error) throw error
 }

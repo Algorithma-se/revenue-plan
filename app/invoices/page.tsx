@@ -635,6 +635,7 @@ function InvoicesContent() {
                       drafts={drafts}
                       savedInvoices={invoices}
                       contractValueSek={contractValueSek}
+                      clientName={selectedItem?.clientName ?? null}
                       onChange={setDrafts}
                       onStatusChange={handleStatusChange}
                     />

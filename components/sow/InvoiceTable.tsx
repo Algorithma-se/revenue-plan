@@ -1,18 +1,22 @@
 'use client'
 
+import { useState } from 'react'
 import type { InvoiceDraft, Invoice, InvoiceStatus } from '@/types/database'
 import { InvoiceStatusBadge } from './InvoiceStatusBadge'
+import { ChatNotifyModal } from './ChatNotifyModal'
 
 interface Props {
   drafts:           InvoiceDraft[]
   savedInvoices:    Invoice[]
   contractValueSek: number | null
+  clientName:       string | null
   onChange:         (drafts: InvoiceDraft[]) => void
   onStatusChange:   (invoiceId: string, status: InvoiceStatus, paidDate: string | null) => void
 }
 
-export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange, onStatusChange }: Props) {
+export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientName, onChange, onStatusChange }: Props) {
   const idMap = new Map(savedInvoices.map(i => [i.invoice_number, i]))
+  const [notifyIdx, setNotifyIdx] = useState<number | null>(null)
 
   function update(idx: number, patch: Partial<InvoiceDraft>) {
     const fullPatch = { ...patch }
@@ -57,9 +61,10 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
             <col className="w-[12%]" /> {/* Issue date */}
             <col className="w-[12%]" /> {/* Due date */}
             <col className="w-[10%]" /> {/* Amount */}
-            <col className="w-[20%]" /> {/* Milestone */}
+            <col className="w-[18%]" /> {/* Milestone */}
             <col className="w-[11%]" /> {/* Status */}
-            <col className="w-[19%]" /> {/* Notes */}
+            <col className="w-[17%]" /> {/* Notes */}
+            <col className="w-[4%]"  /> {/* Notify */}
             <col className="w-[3%]"  /> {/* Delete */}
           </colgroup>
           <thead>
@@ -71,6 +76,7 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
               <th className={`${thCls} text-left`}>Milestone</th>
               <th className={`${thCls} text-left`}>Status</th>
               <th className={`${thCls} text-left`}>Notes</th>
+              <th className="py-2" />
               <th className="py-2" />
             </tr>
           </thead>
@@ -144,6 +150,17 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
                   </td>
                   <td className="px-1 py-1.5">
                     <button
+                      onClick={() => setNotifyIdx(i)}
+                      className="text-[#D1D5DB] hover:text-[#61b5cc] transition-colors"
+                      title="Notify team"
+                    >
+                      <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                        <path d="M14 1a1 1 0 011 1v8a1 1 0 01-1 1H4.414A2 2 0 003 11.586l-2 2V2a1 1 0 011-1h12zM2 0a2 2 0 00-2 2v12.793a.5.5 0 00.854.353l2.853-2.853A1 1 0 014.414 12H14a2 2 0 002-2V2a2 2 0 00-2-2H2z"/>
+                      </svg>
+                    </button>
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <button
                       onClick={() => removeRow(i)}
                       className="text-[#D1D5DB] hover:text-[#DC2626] transition-colors"
                       title="Remove row"
@@ -159,6 +176,15 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, onChange
             })}
           </tbody>
       </table>
+
+      {notifyIdx !== null && drafts[notifyIdx] && (
+        <ChatNotifyModal
+          draft={drafts[notifyIdx]}
+          saved={idMap.get(drafts[notifyIdx].invoice_number) ?? null}
+          clientName={clientName}
+          onClose={() => setNotifyIdx(null)}
+        />
+      )}
 
       <div className="flex items-center justify-between px-5 py-3 border-t border-[#F3F4F6]">
         <button

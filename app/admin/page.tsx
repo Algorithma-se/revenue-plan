@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag } from '@/app/actions/admin'
+import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag, getAppSetting, setAppSetting } from '@/app/actions/admin'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
 
@@ -25,19 +25,39 @@ export default function AdminPage() {
   const [isPending, startTransition]    = useTransition()
   const [invoicesEnabled, setInvoicesEnabled] = useState(true)
   const [flagSaving, setFlagSaving]     = useState(false)
+  const [webhookUrl,  setWebhookUrl]    = useState('')
+  const [webhookSaving, setWebhookSaving] = useState(false)
+  const [webhookSaved,  setWebhookSaved]  = useState(false)
 
   async function load() {
     try {
-      const [emails, flag] = await Promise.all([
+      const [emails, flag, webhook] = await Promise.all([
         getAllowedEmails(),
         getFeatureFlag('invoices'),
+        getAppSetting('google_chat_webhook_url'),
       ])
       setEntries(emails)
       setInvoicesEnabled(flag)
+      setWebhookUrl(webhook ?? '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleSaveWebhook(e: React.FormEvent) {
+    e.preventDefault()
+    setWebhookSaving(true)
+    setWebhookSaved(false)
+    try {
+      await setAppSetting('google_chat_webhook_url', webhookUrl.trim())
+      setWebhookSaved(true)
+      setTimeout(() => setWebhookSaved(false), 2000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setWebhookSaving(false)
     }
   }
 
@@ -170,6 +190,35 @@ export default function AdminPage() {
               />
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Integrations */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-[#0F0F0F] mb-3">Integrations</h2>
+        <div className="bg-white rounded-2xl border border-[#EBEBEB] p-5">
+          <p className="text-sm font-medium text-[#0F0F0F] mb-1">Google Chat webhook</p>
+          <p className="text-xs text-[#9CA3AF] mb-3">
+            Used by the invoice notify button to post messages to a Google Chat space.
+            Create an incoming webhook in Google Chat and paste the URL here.
+          </p>
+          <form onSubmit={handleSaveWebhook} className="flex gap-2">
+            <input
+              type="url"
+              value={webhookUrl}
+              onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="https://chat.googleapis.com/v1/spaces/…"
+              className="flex-1 px-3 py-2 rounded-xl border border-[#EBEBEB] text-sm text-[#0F0F0F] bg-white focus:outline-none focus:border-[#61b5cc] transition-colors font-mono text-xs"
+              disabled={webhookSaving}
+            />
+            <button
+              type="submit"
+              disabled={webhookSaving || !webhookUrl.trim()}
+              className="px-4 py-2 rounded-xl bg-[#61b5cc] text-white text-sm font-medium hover:bg-[#4fa0b8] transition-colors disabled:opacity-40 whitespace-nowrap"
+            >
+              {webhookSaved ? 'Saved ✓' : webhookSaving ? 'Saving…' : 'Save'}
+            </button>
+          </form>
         </div>
       </div>
 
