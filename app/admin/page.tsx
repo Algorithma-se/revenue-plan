@@ -43,7 +43,7 @@ export default function AdminPage() {
       setLoading(false)
     }
     // Load webhook separately — table may not exist yet
-    const webhook = await getAppSetting('google_chat_webhook_url')
+    const webhook = await getAppSetting('revenue_plan_webhook_url')
     setWebhookUrl(webhook ?? '')
   }
 
@@ -51,7 +51,7 @@ export default function AdminPage() {
     e.preventDefault()
     setWebhookSaving(true)
     setWebhookSaved(false)
-    const result = await setAppSetting('google_chat_webhook_url', webhookUrl.trim())
+    const result = await setAppSetting('revenue_plan_webhook_url', webhookUrl.trim())
     setWebhookSaving(false)
     if (result.error) {
       setError(result.error)

@@ -467,10 +467,10 @@ export async function sendGoogleChatNotification(
     const admin = createAdminSupabase()
     const { data: setting } = await admin
       .from('app_settings')
-      .select('google_chat_webhook_url')
+      .select('revenue_plan_webhook_url')
       .limit(1)
       .maybeSingle()
-    const webhookUrl = (setting as Record<string, string> | null)?.google_chat_webhook_url
+    const webhookUrl = (setting as Record<string, string> | null)?.revenue_plan_webhook_url
     if (!webhookUrl) return { error: 'Google Chat webhook URL not configured. Add it in Admin settings.' }
     const res = await fetch(webhookUrl, {
       method:  'POST',
