@@ -31,33 +31,33 @@ export default function AdminPage() {
 
   async function load() {
     try {
-      const [emails, flag, webhook] = await Promise.all([
+      const [emails, flag] = await Promise.all([
         getAllowedEmails(),
         getFeatureFlag('invoices'),
-        getAppSetting('google_chat_webhook_url'),
       ])
       setEntries(emails)
       setInvoicesEnabled(flag)
-      setWebhookUrl(webhook ?? '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
+    // Load webhook separately — table may not exist yet
+    const webhook = await getAppSetting('google_chat_webhook_url')
+    setWebhookUrl(webhook ?? '')
   }
 
   async function handleSaveWebhook(e: React.FormEvent) {
     e.preventDefault()
     setWebhookSaving(true)
     setWebhookSaved(false)
-    try {
-      await setAppSetting('google_chat_webhook_url', webhookUrl.trim())
+    const result = await setAppSetting('google_chat_webhook_url', webhookUrl.trim())
+    setWebhookSaving(false)
+    if (result.error) {
+      setError(result.error)
+    } else {
       setWebhookSaved(true)
       setTimeout(() => setWebhookSaved(false), 2000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setWebhookSaving(false)
     }
   }
 

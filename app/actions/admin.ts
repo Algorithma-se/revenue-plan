@@ -80,19 +80,28 @@ export async function removeAllowedEmail(email: string): Promise<void> {
 }
 
 export async function getAppSetting(key: string): Promise<string | null> {
-  await requireAuth()
-  const { data } = await createAdminSupabase()
-    .from('app_settings')
-    .select('value')
-    .eq('key', key)
-    .maybeSingle()
-  return data?.value ?? null
+  try {
+    await requireAuth()
+    const { data } = await createAdminSupabase()
+      .from('app_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle()
+    return data?.value ?? null
+  } catch {
+    return null
+  }
 }
 
-export async function setAppSetting(key: string, value: string): Promise<void> {
-  await requireAuth()
-  const { error } = await createAdminSupabase()
-    .from('app_settings')
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-  if (error) throw error
+export async function setAppSetting(key: string, value: string): Promise<{ error?: string }> {
+  try {
+    await requireAuth()
+    const { error } = await createAdminSupabase()
+      .from('app_settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    if (error) return { error: error.message }
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save' }
+  }
 }
