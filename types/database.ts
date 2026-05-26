@@ -94,7 +94,7 @@ export interface PlanTarget {
 
 export type SowParseStatus  = 'pending' | 'parsing' | 'done' | 'error'
 export type SowDocumentType = 'original' | 'amendment' | 'change_request'
-export type InvoiceStatus   = 'draft' | 'sent' | 'paid' | 'overdue'
+export type InvoiceStatus   = 'draft' | 'sent' | 'paid'
 export type PaymentTrigger  = 'date' | 'milestone'
 export type InvoicingModel = 'milestone' | 'time_and_materials' | 'capacity' | 'fixed_fee'
 export type InvoiceTiming  = 'month_end' | 'month_start' | 'specific_date' | 'on_completion'

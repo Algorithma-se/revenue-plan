@@ -4,18 +4,16 @@ import { useState } from 'react'
 import type { InvoiceStatus } from '@/types/database'
 import { updateInvoiceStatus } from '@/app/actions/invoices'
 
-const CONFIG: Record<InvoiceStatus, { label: string; bg: string; text: string }> = {
-  draft:    { label: 'Draft',    bg: 'bg-[#F3F4F6]', text: 'text-[#6B7280]' },
-  sent:     { label: 'Sent',     bg: 'bg-[#EFF6FF]', text: 'text-[#2563EB]' },
-  paid:     { label: 'Paid',     bg: 'bg-[#F0FDF4]', text: 'text-[#16A34A]' },
-  overdue:  { label: 'Overdue',  bg: 'bg-[#FEF2F2]', text: 'text-[#DC2626]' },
+const CONFIG: Record<InvoiceStatus, { label: string; cls: string }> = {
+  draft: { label: 'Draft', cls: 'bg-[#9CA3AF] text-white' },
+  sent:  { label: 'Sent',  cls: 'bg-[#2563EB] text-white' },
+  paid:  { label: 'Paid',  cls: 'bg-[#16A34A] text-white' },
 }
 
 const CYCLE: Record<InvoiceStatus, InvoiceStatus> = {
   draft: 'sent',
   sent:  'paid',
-  paid:  'overdue',
-  overdue: 'draft',
+  paid:  'draft',
 }
 
 interface Props {
@@ -26,18 +24,15 @@ interface Props {
 }
 
 export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Props) {
-  const [saving, setSaving]           = useState(false)
-  const [showDateInput, setShowDateInput] = useState(false)
-  const [dateVal, setDateVal]         = useState(paidDate ?? '')
+  const [saving, setSaving]         = useState(false)
+  const [showDate, setShowDate]     = useState(false)
+  const [dateVal, setDateVal]       = useState(paidDate ?? '')
 
-  const cfg = CONFIG[status]
+  const cfg  = CONFIG[status] ?? CONFIG.draft
+  const next = CYCLE[status] ?? 'draft'
 
   async function cycle() {
-    const next = CYCLE[status]
-    if (next === 'paid') {
-      setShowDateInput(true)
-      return
-    }
+    if (next === 'paid') { setShowDate(true); return }
     setSaving(true)
     try {
       await updateInvoiceStatus(invoiceId, next, undefined)
@@ -52,20 +47,20 @@ export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Pr
     try {
       await updateInvoiceStatus(invoiceId, 'paid', dateVal || undefined)
       onChange('paid', dateVal || null)
-      setShowDateInput(false)
+      setShowDate(false)
     } finally {
       setSaving(false)
     }
   }
 
-  if (showDateInput) {
+  if (showDate) {
     return (
       <div className="flex items-center gap-1">
         <input
           type="date"
           value={dateVal}
           onChange={e => setDateVal(e.target.value)}
-          className="text-xs border border-[#E5E7EB] rounded px-1.5 py-0.5 w-32"
+          className="text-xs border border-[#E5E7EB] rounded px-1.5 py-0.5 w-28"
           autoFocus
         />
         <button
@@ -73,14 +68,9 @@ export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Pr
           disabled={saving}
           className="text-xs px-2 py-0.5 bg-[#16A34A] text-white rounded hover:bg-[#15803D] transition-colors disabled:opacity-50"
         >
-          {saving ? '…' : 'Paid'}
+          {saving ? '…' : '✓'}
         </button>
-        <button
-          onClick={() => setShowDateInput(false)}
-          className="text-xs text-[#9CA3AF] hover:text-[#6B7280]"
-        >
-          ✕
-        </button>
+        <button onClick={() => setShowDate(false)} className="text-xs text-[#9CA3AF] hover:text-[#6B7280]">✕</button>
       </div>
     )
   }
@@ -89,8 +79,8 @@ export function InvoiceStatusBadge({ invoiceId, status, paidDate, onChange }: Pr
     <button
       onClick={cycle}
       disabled={saving}
-      title="Click to advance status"
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text} hover:opacity-80 transition-opacity disabled:opacity-50`}
+      title={`Click to mark as ${next}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold leading-none hover:opacity-80 transition-opacity disabled:opacity-50 ${cfg.cls}`}
     >
       {saving ? '…' : cfg.label}
     </button>
