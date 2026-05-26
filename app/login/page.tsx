@@ -24,16 +24,16 @@ function JOracleMark() {
 }
 
 const PILLS = [
-  { icon: '📊', label: 'Revenue Forecasting' },
-  { icon: '🧾', label: 'Invoice Automation' },
-  { icon: '📈', label: 'P&L Planning' },
-  { icon: '🔄', label: 'Cash Flow Tracking' },
-  { icon: '👥', label: 'Resource Planning' },
-  { icon: '📦', label: 'Operations Hub' },
-  { icon: '🤖', label: 'AI-Powered Insights' },
-  { icon: '🌍', label: 'Multi-Entity Finance' },
-  { icon: '⚡', label: 'Real-Time Reporting' },
-  { icon: '🏆', label: 'SOW Management' },
+  { icon: '📊', label: 'P&L by Pod' },
+  { icon: '📋', label: 'Work List Staging' },
+  { icon: '🤖', label: 'AI Profitability Summary' },
+  { icon: '🎯', label: 'A · B · F Status Tracking' },
+  { icon: '🍩', label: 'Revenue Mix Chart' },
+  { icon: '📈', label: 'Client Trend Arrows' },
+  { icon: '⚠️', label: 'Aging Cell Alerts' },
+  { icon: '🧾', label: 'SOW → Invoice Automation' },
+  { icon: '⚡', label: 'Real-Time Work List' },
+  { icon: '💹', label: 'CB1% Margin Tracking' },
 ]
 
 function PillStrip() {
