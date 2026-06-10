@@ -6,6 +6,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'aSAP by Algorithma',
   description: 'Revenue forecasting and P&L allocation',
+  icons: [{ rel: 'icon', type: 'image/svg+xml', url: '/favicon.svg' }],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
