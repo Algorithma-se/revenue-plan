@@ -460,7 +460,7 @@ export default function AdminPage() {
                   setAllieRunning(true)
                   setAllieResult(null)
                   try {
-                    const result = await initiateAllieInvoices()
+                    const result = await initiateAllieInvoices(false)
                     setAllieResult(result)
                   } catch (e) {
                     setAllieResult({ initiated: 0, errors: [e instanceof Error ? e.message : 'Unknown error'] })

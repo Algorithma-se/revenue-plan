@@ -215,7 +215,7 @@ Advisory retainer — Q2 2026`
   }
 }
 
-export async function initiateAllieInvoices(): Promise<{ initiated: number; errors: string[] }> {
+export async function initiateAllieInvoices(notify = true): Promise<{ initiated: number; errors: string[] }> {
   const admin = createAdminSupabase()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -290,7 +290,7 @@ export async function initiateAllieInvoices(): Promise<{ initiated: number; erro
         `👉 Review & approve: https://asap.algorithma.ai/invoices?bl_approve=${inv.id}`,
       ].join('\n')
 
-      await sendGoogleChatNotification(msg)
+      if (notify) await sendGoogleChatNotification(msg)
       initiated++
     } catch (err) {
       errors.push(`#${inv.invoice_number}: ${err instanceof Error ? err.message : 'unknown'}`)
