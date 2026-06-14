@@ -12,6 +12,7 @@ import { getSowDocuments, getSowDownloadUrl, deleteSow } from '@/app/actions/sow
 import { SowTermsModal } from '@/components/sow/SowTermsModal'
 import { InvoiceTable } from '@/components/sow/InvoiceTable'
 import { BLApproveModal } from '@/components/invoice/BLApproveModal'
+import { BLSubmitModal } from '@/components/invoice/BLSubmitModal'
 import { SowUploadModal } from '@/components/sow/SowUploadModal'
 import { SowReviewModal } from '@/components/sow/SowReviewModal'
 import { AmendmentSuggestionsModal } from '@/components/sow/AmendmentSuggestionsModal'
@@ -147,6 +148,7 @@ function InvoicesContent() {
   }, [])
 
   const [blDeepLinkInvoice, setBlDeepLinkInvoice] = useState<Invoice | null>(null)
+  const [blEditInvoice,     setBlEditInvoice]     = useState<Invoice | null>(null)
 
   useEffect(() => {
     const approveId = searchParams.get('bl_approve')
@@ -890,9 +892,21 @@ function InvoicesContent() {
               setBlDeepLinkId(null)
               router.replace(selectedId ? `/invoices?item=${selectedId}` : '/invoices', { scroll: false })
             }}
+            onEdit={() => { setBlEditInvoice(inv); setBlDeepLinkId(null) }}
           />
         )
       })()}
+
+      {blEditInvoice && (
+        <BLSubmitModal
+          invoice={blEditInvoice}
+          onDone={patch => {
+            setInvoices(ivs => ivs.map(i => i.id === blEditInvoice.id ? { ...i, ...patch } : i))
+            setBlEditInvoice(null)
+          }}
+          onClose={() => setBlEditInvoice(null)}
+        />
+      )}
     </div>
   )
 }

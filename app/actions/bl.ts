@@ -155,6 +155,151 @@ export async function rejectBLInvoice(
   return {}
 }
 
+export async function getAllieInvoiceEnabled(): Promise<boolean> {
+  try {
+    const admin = createAdminSupabase()
+    const { data } = await admin
+      .from('app_settings')
+      .select('allie_invoice_enabled')
+      .limit(1)
+      .maybeSingle()
+    return (data as Record<string, boolean> | null)?.allie_invoice_enabled ?? false
+  } catch {
+    return false
+  }
+}
+
+async function generateLineDescription(ctx: {
+  clientName:     string
+  project:        string
+  milestoneLabel: string
+  amountSek:      number
+  issueDate:      string
+  sowModel:       string
+  prevLine:       string
+}): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return ctx.milestoneLabel || `Consulting services — ${ctx.issueDate.slice(0, 7)}`
+
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
+    const client    = new Anthropic({ apiKey })
+    const period    = new Date(ctx.issueDate + 'T12:00:00')
+      .toLocaleString('en-SE', { month: 'long', year: 'numeric' })
+
+    const prompt = `Write a concise invoice line description in English (max 100 characters).
+Return only the line text — no quotes, no explanation.
+
+Client: ${ctx.clientName}
+Project: ${ctx.project || '—'}
+Milestone: ${ctx.milestoneLabel || '—'}
+Invoice period: ${period}
+Amount: ${Math.round(ctx.amountSek / 1000)} kSEK
+Invoicing model: ${ctx.sowModel || 'consulting'}
+Previous line used for this client: ${ctx.prevLine || 'none'}
+
+Examples:
+Consulting services — June 2026 (160 h capacity)
+Project delivery — Phase 2 completion
+Advisory retainer — Q2 2026`
+
+    const response = await client.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 60,
+      messages:   [{ role: 'user', content: prompt }],
+    })
+    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+    return text.slice(0, 100) || ctx.milestoneLabel || `Consulting services — ${period}`
+  } catch {
+    return ctx.milestoneLabel || `Consulting services — ${ctx.issueDate.slice(0, 7)}`
+  }
+}
+
+export async function initiateAllieInvoices(): Promise<{ initiated: number; errors: string[] }> {
+  const admin = createAdminSupabase()
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { data: eligible } = await admin
+    .from('invoices')
+    .select('id, invoice_number, client_name, project, milestone_label, amount_sek, issue_date, manual_revenue_item_id')
+    .eq('status', 'draft')
+    .is('bl_status', null)
+    .lte('issue_date', today)
+    .order('issue_date', { ascending: true })
+
+  if (!eligible?.length) return { initiated: 0, errors: [] }
+
+  const errors: string[] = []
+  let initiated = 0
+
+  for (const inv of eligible) {
+    try {
+      const [sowResult, prevResult] = await Promise.all([
+        admin
+          .from('sow_documents')
+          .select('parsed_raw')
+          .eq('manual_revenue_item_id', inv.manual_revenue_item_id ?? '')
+          .not('parse_status', 'eq', 'error')
+          .order('version_number', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        admin
+          .from('invoices')
+          .select('bl_line_desc, bl_your_reference, bl_our_reference, bl_po_number, bl_marking')
+          .eq('client_name', inv.client_name ?? '')
+          .not('bl_status', 'is', null)
+          .order('issue_date', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+
+      const sow  = sowResult.data
+      const prev = prevResult.data
+
+      const lineDesc = await generateLineDescription({
+        clientName:     inv.client_name    ?? '',
+        project:        inv.project        ?? '',
+        milestoneLabel: inv.milestone_label ?? '',
+        amountSek:      inv.amount_sek,
+        issueDate:      inv.issue_date,
+        sowModel:       (sow?.parsed_raw as Record<string, string> | null)?.invoicing_model ?? '',
+        prevLine:       prev?.bl_line_desc ?? '',
+      })
+
+      const { error: updateErr } = await admin
+        .from('invoices')
+        .update({
+          bl_status:          'pending',
+          bl_allie_initiated: true,
+          bl_line_desc:       lineDesc,
+          bl_your_reference:  prev?.bl_your_reference ?? null,
+          bl_our_reference:   prev?.bl_our_reference  ?? null,
+          bl_po_number:       prev?.bl_po_number      ?? null,
+          bl_marking:         prev?.bl_marking        ?? null,
+        })
+        .eq('id', inv.id)
+
+      if (updateErr) { errors.push(`#${inv.invoice_number}: ${updateErr.message}`); continue }
+
+      const kSEK = Math.round(inv.amount_sek / 1000)
+      const msg  = [
+        `🤖 *Allie prepared an invoice for approval*`,
+        `Client: ${inv.client_name ?? '—'} · #${inv.invoice_number} · ${kSEK} kSEK`,
+        `Line: "${lineDesc}"`,
+        ``,
+        `👉 Review & approve: https://asap.algorithma.ai/invoices?bl_approve=${inv.id}`,
+      ].join('\n')
+
+      await sendGoogleChatNotification(msg)
+      initiated++
+    } catch (err) {
+      errors.push(`#${inv.invoice_number}: ${err instanceof Error ? err.message : 'unknown'}`)
+    }
+  }
+
+  return { initiated, errors }
+}
+
 export async function getBLBetaEnabled(): Promise<boolean> {
   try {
     const admin = createAdminSupabase()

@@ -9,9 +9,10 @@ interface Props {
   isStub?:   boolean
   onDone:    (updated: Partial<Invoice>) => void
   onClose:   () => void
+  onEdit?:   () => void
 }
 
-export function BLApproveModal({ invoice, isStub = true, onDone, onClose }: Props) {
+export function BLApproveModal({ invoice, isStub = true, onDone, onClose, onEdit }: Props) {
   const [rejecting,  setRejecting]  = useState(false)
   const [reason,     setReason]     = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -59,6 +60,22 @@ export function BLApproveModal({ invoice, isStub = true, onDone, onClose }: Prop
         </div>
 
         <div className="px-6 py-4">
+          {invoice.bl_allie_initiated && (
+            <div className="flex items-center justify-between gap-3 mb-4 px-3 py-2.5 bg-[#F0F9FF] border border-[#BAE6FD] rounded-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🤖</span>
+                <span className="text-xs text-[#0369A1] font-medium">Drafted by Allie — review before approving</span>
+              </div>
+              {onEdit && (
+                <button
+                  onClick={onEdit}
+                  className="flex-shrink-0 text-xs font-medium text-[#0369A1] hover:text-[#0284C7] transition-colors"
+                >
+                  Edit details
+                </button>
+              )}
+            </div>
+          )}
           <div className="bg-[#F9F9F8] rounded-xl p-4 space-y-0 mb-4 max-h-64 overflow-y-auto">
             <div className={rowCls}>
               <span className={keyCls}>Line description</span>

@@ -270,7 +270,8 @@ function InvoiceOverviewContent() {
       bl_your_reference:      inv.bl_your_reference ?? null,
       bl_our_reference:       inv.bl_our_reference  ?? null,
       bl_po_number:           inv.bl_po_number      ?? null,
-      bl_marking:             inv.bl_marking        ?? null,
+      bl_marking:             inv.bl_marking          ?? null,
+      bl_allie_initiated:     inv.bl_allie_initiated  ?? false,
     }
   }
 
@@ -951,6 +952,7 @@ function InvoiceOverviewContent() {
             setBlApproveRow(null)
           }}
           onClose={() => setBlApproveRow(null)}
+          onEdit={() => { setBlSubmitRow(blApproveRow); setBlApproveRow(null) }}
         />
       )}
 

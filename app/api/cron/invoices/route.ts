@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase-admin'
 import { sendGoogleChatNotification } from '@/app/actions/invoices'
+import { getAllieInvoiceEnabled, initiateAllieInvoices } from '@/app/actions/bl'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,14 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminSupabase()
 
+  // Run Allie auto-initiation first — she picks up invoices due today
+  const allieEnabled = await getAllieInvoiceEnabled()
+  let allieInitiated = 0
+  if (allieEnabled) {
+    const result = await initiateAllieInvoices()
+    allieInitiated = result.initiated
+  }
+
   // Sent invoices overdue or due within 14 days
   const { data: sentInvoices, error: e1 } = await admin
     .from('invoices')
@@ -30,11 +39,12 @@ export async function GET(req: NextRequest) {
     .lte('due_date', in14)
     .order('due_date', { ascending: true })
 
-  // Draft invoices with issue_date within the next 14 days (this week + next week)
+  // Draft invoices not yet in BL workflow, issue_date within the next 14 days
   const { data: draftInvoices, error: e2 } = await admin
     .from('invoices')
     .select('invoice_number, client_name, amount_sek, issue_date, due_date')
     .eq('status', 'draft')
+    .is('bl_status', null)
     .lte('issue_date', in14)
     .order('issue_date', { ascending: true })
 
@@ -79,5 +89,5 @@ export async function GET(req: NextRequest) {
   const result = await sendGoogleChatNotification(parts.join('\n'))
   if (result.error) return NextResponse.json({ error: result.error }, { status: 500 })
 
-  return NextResponse.json({ ok: true, sent: true, overdue: overdue.length, toSend: toSend.length, dueSoon: dueSoon.length })
+  return NextResponse.json({ ok: true, sent: true, overdue: overdue.length, toSend: toSend.length, dueSoon: dueSoon.length, allieInitiated })
 }

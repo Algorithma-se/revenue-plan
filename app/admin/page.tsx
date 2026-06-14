@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag, getAppSetting, setAppSetting } from '@/app/actions/admin'
-import { getBLBetaEnabled } from '@/app/actions/bl'
+import { getBLBetaEnabled, getAllieInvoiceEnabled } from '@/app/actions/bl'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
 
@@ -36,8 +36,10 @@ export default function AdminPage() {
   const [blDatabaseGuid,  setBlDatabaseGuid]  = useState('')
   const [blAuthUrl,       setBlAuthUrl]       = useState('')
   const [blApiUrl,        setBlApiUrl]        = useState('')
-  const [blCredSaving,    setBlCredSaving]    = useState(false)
-  const [blCredSaved,     setBlCredSaved]     = useState(false)
+  const [blCredSaving,         setBlCredSaving]         = useState(false)
+  const [blCredSaved,          setBlCredSaved]          = useState(false)
+  const [allieInvoiceEnabled,  setAllieInvoiceEnabled]  = useState(false)
+  const [allieInvoiceSaving,   setAllieInvoiceSaving]   = useState(false)
 
   async function load() {
     try {
@@ -53,7 +55,7 @@ export default function AdminPage() {
       setLoading(false)
     }
     // Load app settings separately — columns may not exist yet
-    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi] = await Promise.all([
+    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi, allieInv] = await Promise.all([
       getAppSetting('revenue_plan_webhook_url'),
       getBLBetaEnabled(),
       getAppSetting('bl_client_id'),
@@ -61,6 +63,7 @@ export default function AdminPage() {
       getAppSetting('bl_database_guid'),
       getAppSetting('bl_auth_url'),
       getAppSetting('bl_api_url'),
+      getAllieInvoiceEnabled(),
     ])
     setWebhookUrl(webhook ?? '')
     setBlBetaEnabled(blBeta)
@@ -69,6 +72,7 @@ export default function AdminPage() {
     setBlDatabaseGuid(blGuid ?? '')
     setBlAuthUrl(blAuth ?? '')
     setBlApiUrl(blApi ?? '')
+    setAllieInvoiceEnabled(allieInv)
   }
 
   async function handleSaveWebhook(e: React.FormEvent) {
@@ -91,6 +95,14 @@ export default function AdminPage() {
     const result = await setAppSetting('bl_beta_enabled', String(next))
     setBlBetaSaving(false)
     if (result.error) { setBlBetaEnabled(!next); setError(result.error) }
+  }
+
+  async function handleToggleAllieInvoice(next: boolean) {
+    setAllieInvoiceEnabled(next)
+    setAllieInvoiceSaving(true)
+    const result = await setAppSetting('allie_invoice_enabled', String(next))
+    setAllieInvoiceSaving(false)
+    if (result.error) { setAllieInvoiceEnabled(!next); setError(result.error) }
   }
 
   async function handleSaveBLCredentials(e: React.FormEvent) {
@@ -303,7 +315,27 @@ export default function AdminPage() {
           </div>
 
           {blBetaEnabled && (
-            <form onSubmit={handleSaveBLCredentials} className="px-5 py-4 space-y-3">
+            <>
+            <div className="flex items-center justify-between px-5 py-4 border-t border-[#F3F4F6]">
+              <div>
+                <p className="text-sm font-medium text-[#0F0F0F]">Allie auto-invoicing</p>
+                <p className="text-xs text-[#9CA3AF] mt-0.5">
+                  Allie detects draft invoices whose issue date has arrived and auto-prepares BL drafts for approval via Google Chat.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={allieInvoiceEnabled}
+                onClick={() => handleToggleAllieInvoice(!allieInvoiceEnabled)}
+                disabled={allieInvoiceSaving}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                  allieInvoiceEnabled ? 'bg-[#61b5cc]' : 'bg-[#D1D5DB]'
+                }`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${allieInvoiceEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveBLCredentials} className="px-5 py-4 space-y-3 border-t border-[#F3F4F6]">
               <p className="text-xs text-[#9CA3AF]">OAuth 2.0 credentials for the Björn Lundén API. Leave blank to run in stub mode.</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -365,6 +397,7 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+            </>
           )}
         </div>
       </div>

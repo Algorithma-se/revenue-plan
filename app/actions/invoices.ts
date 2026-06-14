@@ -547,11 +547,12 @@ export async function getAllInvoicesWithClients(): Promise<{
   bl_our_reference:   string | null
   bl_po_number:       string | null
   bl_marking:         string | null
+  bl_allie_initiated: boolean | null
 }[]> {
   const supabase = await createServerSupabase()
   const { data, error } = await supabase
     .from('invoices')
-    .select('id, invoice_number, issue_date, due_date, paid_date, amount_sek, payment_trigger, milestone_label, status, notes, exclude_vat, client_name, bl_status, bl_invoice_id, bl_line_desc, bl_reject_reason, bl_rejected_at, bl_your_reference, bl_our_reference, bl_po_number, bl_marking, manual_revenue_items(client_name, project)')
+    .select('id, invoice_number, issue_date, due_date, paid_date, amount_sek, payment_trigger, milestone_label, status, notes, exclude_vat, client_name, bl_status, bl_invoice_id, bl_line_desc, bl_reject_reason, bl_rejected_at, bl_your_reference, bl_our_reference, bl_po_number, bl_marking, bl_allie_initiated, manual_revenue_items(client_name, project)')
     // Note: invoices.client_name (denormalized) is used as fallback when join is null
     .order('issue_date', { ascending: true })
   if (error) throw new Error(error.message)
@@ -578,7 +579,8 @@ export async function getAllInvoicesWithClients(): Promise<{
     bl_your_reference: row.bl_your_reference ?? null,
     bl_our_reference:  row.bl_our_reference  ?? null,
     bl_po_number:      row.bl_po_number      ?? null,
-    bl_marking:        row.bl_marking        ?? null,
+    bl_marking:          row.bl_marking          ?? null,
+    bl_allie_initiated:  row.bl_allie_initiated  ?? false,
   }))
 }
 

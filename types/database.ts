@@ -181,6 +181,7 @@ export interface Invoice {
   bl_our_reference?:   string | null
   bl_po_number?:       string | null
   bl_marking?:         string | null
+  bl_allie_initiated?: boolean | null
 }
 
 export interface InvoiceDraft {
