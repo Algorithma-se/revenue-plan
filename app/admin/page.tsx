@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag, getAppSetting, setAppSetting } from '@/app/actions/admin'
-import { getBLBetaEnabled, getAllieInvoiceEnabled } from '@/app/actions/bl'
+import { getBLBetaEnabled, getAllieInvoiceEnabled, initiateAllieInvoices } from '@/app/actions/bl'
+import { sendGoogleChatNotification } from '@/app/actions/invoices'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
 
@@ -40,6 +41,11 @@ export default function AdminPage() {
   const [blCredSaved,          setBlCredSaved]          = useState(false)
   const [allieInvoiceEnabled,  setAllieInvoiceEnabled]  = useState(false)
   const [allieInvoiceSaving,   setAllieInvoiceSaving]   = useState(false)
+  const [allieRunning,         setAllieRunning]         = useState(false)
+  const [allieResult,          setAllieResult]          = useState<{ initiated: number; errors: string[] } | null>(null)
+  const [testChatMsg,          setTestChatMsg]          = useState('')
+  const [testChatSending,      setTestChatSending]      = useState(false)
+  const [testChatResult,       setTestChatResult]       = useState<string | null>(null)
 
   async function load() {
     try {
@@ -399,6 +405,92 @@ export default function AdminPage() {
             </form>
             </>
           )}
+        </div>
+      </div>
+
+      {/* Testing / Debug */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-[#0F0F0F] mb-1">Testing</h2>
+        <p className="text-xs text-[#9CA3AF] mb-3">Manually trigger flows without waiting for the cron schedule.</p>
+        <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden divide-y divide-[#F3F4F6]">
+
+          {/* Trigger Allie */}
+          <div className="px-5 py-4">
+            <p className="text-sm font-medium text-[#0F0F0F] mb-0.5">Run Allie invoice initiation now</p>
+            <p className="text-xs text-[#9CA3AF] mb-3">
+              Finds all draft invoices whose issue date has arrived, pre-fills BL fields with AI, and sends Chat notifications.
+            </p>
+            <div className="flex items-start gap-3">
+              <button
+                onClick={async () => {
+                  setAllieRunning(true)
+                  setAllieResult(null)
+                  try {
+                    const result = await initiateAllieInvoices()
+                    setAllieResult(result)
+                  } catch (e) {
+                    setAllieResult({ initiated: 0, errors: [e instanceof Error ? e.message : 'Unknown error'] })
+                  }
+                  setAllieRunning(false)
+                }}
+                disabled={allieRunning}
+                className="px-4 py-1.5 rounded-xl bg-[#0F0F0F] text-white text-sm font-medium hover:bg-[#374151] transition-colors disabled:opacity-40 whitespace-nowrap"
+              >
+                {allieRunning ? 'Running…' : 'Run now'}
+              </button>
+              {allieResult && (
+                <div className={`text-xs rounded-xl px-3 py-2 ${
+                  allieResult.errors.length > 0
+                    ? 'bg-[#FFF1F2] border border-[#FECDD3] text-[#DC2626]'
+                    : 'bg-[#F0FDF4] border border-[#BBF7D0] text-[#16A34A]'
+                }`}>
+                  {allieResult.initiated > 0
+                    ? `✓ Initiated ${allieResult.initiated} invoice${allieResult.initiated !== 1 ? 's' : ''}`
+                    : 'No eligible invoices found'}
+                  {allieResult.errors.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {allieResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Test Chat notification */}
+          <div className="px-5 py-4">
+            <p className="text-sm font-medium text-[#0F0F0F] mb-0.5">Send test Chat notification</p>
+            <p className="text-xs text-[#9CA3AF] mb-3">Post a message to the configured Google Chat webhook.</p>
+            <div className="flex gap-2">
+              <input
+                value={testChatMsg}
+                onChange={e => setTestChatMsg(e.target.value)}
+                placeholder="Test message from aSAP admin…"
+                className="flex-1 px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc]"
+              />
+              <button
+                onClick={async () => {
+                  if (!testChatMsg.trim()) return
+                  setTestChatSending(true)
+                  setTestChatResult(null)
+                  const result = await sendGoogleChatNotification(testChatMsg.trim())
+                  setTestChatSending(false)
+                  setTestChatResult(result.error ?? 'Sent ✓')
+                  if (!result.error) setTimeout(() => setTestChatResult(null), 3000)
+                }}
+                disabled={testChatSending || !testChatMsg.trim()}
+                className="px-4 py-1.5 rounded-xl bg-[#61b5cc] text-white text-xs font-medium hover:bg-[#4fa0b8] transition-colors disabled:opacity-40 whitespace-nowrap"
+              >
+                {testChatSending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+            {testChatResult && (
+              <p className={`mt-2 text-xs ${testChatResult === 'Sent ✓' ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                {testChatResult}
+              </p>
+            )}
+          </div>
+
         </div>
       </div>
 
