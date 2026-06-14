@@ -4,14 +4,41 @@ import { useRef, useState } from 'react'
 import type { SowDocument, SowDocumentType } from '@/types/database'
 import { uploadSow, parseSow } from '@/app/actions/sow'
 
+interface ClientOption { id: string; clientName: string | null; project: string | null }
+
 interface Props {
-  itemId: string
-  clientName: string | null
-  onDone: (sow: SowDocument) => void
+  itemId?: string
+  items?: ClientOption[]
+  clientName?: string | null
+  onDone: (sow: SowDocument, itemId: string) => void
   onClose: () => void
 }
 
-export function SowUploadModal({ itemId, clientName, onDone, onClose }: Props) {
+function buildClientGroups(items: ClientOption[]) {
+  const map = new Map<string, ClientOption[]>()
+  for (const item of items) {
+    const key = item.clientName ?? '(no name)'
+    map.set(key, [...(map.get(key) ?? []), item])
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b, 'sv', { sensitivity: 'base' }))
+}
+
+export function SowUploadModal({ itemId: itemIdProp, items, clientName: clientNameProp, onDone, onClose }: Props) {
+  const clientGroups = items ? buildClientGroups(items) : []
+  const firstClient  = clientGroups[0]?.[0] ?? ''
+  const firstItemId  = clientGroups[0]?.[1][0]?.id ?? ''
+
+  const [pickedClient,  setPickedClient]  = useState<string>(firstClient)
+  const [pickedItemId,  setPickedItemId]  = useState<string>(itemIdProp ?? firstItemId)
+
+  const itemId     = itemIdProp ?? pickedItemId
+  const clientName = clientNameProp ?? pickedClient ?? null
+
+  function handleClientChange(name: string) {
+    setPickedClient(name)
+    const firstItem = clientGroups.find(([k]) => k === name)?.[1][0]
+    if (firstItem) setPickedItemId(firstItem.id)
+  }
   const [docType, setDocType]   = useState<SowDocumentType>('original')
   const [file, setFile]         = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
@@ -51,7 +78,7 @@ export function SowUploadModal({ itemId, clientName, onDone, onClose }: Props) {
         setPhase('error')
         return
       }
-      onDone(parseResult.data)
+      onDone(parseResult.data, itemId)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
       setPhase('error')
@@ -70,14 +97,27 @@ export function SowUploadModal({ itemId, clientName, onDone, onClose }: Props) {
           </button>
         </div>
 
-        {clientName && (
+        {items ? (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-[#374151] mb-1.5">Client</label>
+            <select
+              value={pickedClient}
+              onChange={e => handleClientChange(e.target.value)}
+              className="w-full px-3 py-2 text-sm text-[#0F0F0F] bg-white border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#61b5cc] focus:border-transparent"
+            >
+              {clientGroups.map(([name]) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+        ) : clientName ? (
           <div className="flex items-center gap-2 mb-5 px-3 py-2 bg-[#FFF7ED] border border-[#FED7AA] rounded-xl">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-[#D97706] flex-shrink-0">
               <path d="M13.5 8.5l-5.5 5.5a3.5 3.5 0 01-4.95-4.95l6-6a2 2 0 012.83 2.83l-6.01 6a.5.5 0 01-.71-.71l5.5-5.5" />
             </svg>
             <span className="text-xs text-[#92400E]">Attaching to <span className="font-semibold">{clientName}</span></span>
           </div>
-        )}
+        ) : null}
 
         {/* Document type */}
         <div className="mb-4">

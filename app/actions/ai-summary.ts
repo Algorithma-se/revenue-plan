@@ -23,6 +23,20 @@ export interface AISummaryResult {
   generatedAt: string
 }
 
+export interface AIYearlyInput {
+  months:           string[]
+  revenueABByMonth: number[]
+  forecastByMonth:  number[]
+  costsByMonth:     number[]
+  topClients: {
+    name:    string
+    abTotal: number
+    fTotal:  number
+  }[]
+  fyYear: string
+  fyEnd:  string
+}
+
 // Fiscal quarters: Q1 Aug–Oct, Q2 Nov–Jan, Q3 Feb–Apr, Q4 May–Jul
 function getFiscalQuarter(month: string): 1 | 2 | 3 | 4 {
   const m = parseInt(month.slice(5, 7), 10)
@@ -93,7 +107,7 @@ export async function getAISummary(input: AISummaryInput, force = false): Promis
     .map(c => `  ${c.name}: ${fmt(c.currentAB)} A+B this month`)
     .join('\n')
 
-  const prompt = `You are a concise CFO assistant for Algorithma, a Swedish consulting firm. Fiscal year ends ${fyEnd}.
+  const prompt = `You are Allie, aSAP's AI and concise CFO assistant for Algorithma, a Swedish consulting firm. Fiscal year ends ${fyEnd}.
 
 Reply with exactly this format — no other text, no markdown bold (**), no backticks:
 Line 1: a single sharp tagline about this month's financial health (honest, direct)
@@ -135,6 +149,88 @@ ${clientLines || '  (no data)'}`
   await supabase
     .from('ai_summaries')
     .upsert({ month: weekKey, summary, generated_at: generatedAt }, { onConflict: 'month' })
+
+  return { summary, generatedAt }
+}
+
+export async function getAIYearlySummary(input: AIYearlyInput, force = false): Promise<AISummaryResult> {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) throw new Error('ANTHROPIC_API_KEY not configured')
+
+  const weekKey  = currentWeekMonday()
+  const cacheKey = `fy-${weekKey}`
+  const supabase = await createServerSupabase()
+
+  if (!force) {
+    const { data } = await supabase
+      .from('ai_summaries')
+      .select('summary, generated_at')
+      .eq('month', cacheKey)
+      .maybeSingle()
+    if (data) return { summary: data.summary, generatedAt: data.generated_at }
+  }
+
+  const { months, revenueABByMonth, forecastByMonth, costsByMonth, topClients, fyYear, fyEnd } = input
+
+  const fmt = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
+
+  const fyRevAB   = revenueABByMonth.reduce((s, v) => s + v, 0)
+  const fyFC      = forecastByMonth.reduce((s, v)  => s + v, 0)
+  const fyCosts   = costsByMonth.reduce((s, v)     => s + v, 0)
+  const fyMargin  = fyRevAB + fyFC - fyCosts
+  const fyMarginPct = (fyRevAB + fyFC) > 0 ? Math.round((fyMargin / (fyRevAB + fyFC)) * 100) : 0
+
+  const today         = new Date()
+  const currentMonth  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const monthsLeft    = months.filter(m => m > currentMonth).length
+
+  const fyTotal = topClients.reduce((s, c) => s + c.abTotal + c.fTotal, 0)
+  const top3Pct = fyTotal > 0
+    ? Math.round(topClients.slice(0, 3).reduce((s, c) => s + c.abTotal + c.fTotal, 0) / fyTotal * 100)
+    : 0
+
+  const clientLines = topClients
+    .slice(0, 6)
+    .map(c => `  ${c.name}: ${fmt(c.abTotal)} confirmed + ${fmt(c.fTotal)} pipeline`)
+    .join('\n')
+
+  const prompt = `You are Allie, aSAP's AI and concise CFO assistant for Algorithma, a Swedish consulting firm.
+Fiscal year ${fyYear} ends ${fyEnd}. Today there are ${monthsLeft} months remaining in the fiscal year.
+
+Reply with exactly this format — no other text, no markdown bold (**), no backticks:
+Line 1: a single sharp tagline on whether FY${fyYear} is within reach (honest, direct)
+Line 2: • [FY revenue: ${fmt(fyRevAB)} kSEK confirmed A+B + ${fmt(fyFC)} kSEK pipeline = ${fmt(fyRevAB + fyFC)} kSEK total — strong or gap?]
+Line 3: • [FY margin: ${fmt(fyCosts)} kSEK costs → ${fyMarginPct}% blended margin including pipeline — healthy?]
+Line 4: • [pipeline risk: ${fmt(fyFC)} kSEK F-status over ${monthsLeft} month${monthsLeft !== 1 ? 's' : ''} — conversion confidence]
+Line 5: • [client concentration: top 3 = ${top3Pct}% of FY revenue — healthy spread or risk?]
+Line 6: • [pace: ${monthsLeft} month${monthsLeft !== 1 ? 's' : ''} remaining — monthly run-rate needed to close the year strong]
+Line 7: • [year-end call: honest probability of hitting or missing the fiscal year target]
+
+Plain text only. No bold. No bullet symbols other than •.
+
+Full year to ${fyEnd}:
+  Confirmed A+B: ${fmt(fyRevAB)} kSEK  |  Pipeline FC: ${fmt(fyFC)} kSEK  |  Total: ${fmt(fyRevAB + fyFC)} kSEK
+  Full-year costs: ${fmt(fyCosts)} kSEK  |  Blended margin: ${fyMarginPct}%
+  Months remaining: ${monthsLeft}  |  Top-3 client share: ${top3Pct}%
+
+Client breakdown (full year):
+${clientLines || '  (no data)'}`
+
+  const client = new Anthropic({ apiKey: key })
+  const message = await client.messages.create({
+    model:      'claude-haiku-4-5-20251001',
+    max_tokens: 400,
+    messages:   [{ role: 'user', content: prompt }],
+  })
+
+  const block = message.content[0]
+  if (block.type !== 'text') throw new Error('Unexpected response type')
+  const summary = block.text
+
+  const generatedAt = new Date().toISOString()
+  await supabase
+    .from('ai_summaries')
+    .upsert({ month: cacheKey, summary, generated_at: generatedAt }, { onConflict: 'month' })
 
   return { summary, generatedAt }
 }

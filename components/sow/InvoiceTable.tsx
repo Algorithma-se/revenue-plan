@@ -4,19 +4,37 @@ import { useState } from 'react'
 import type { InvoiceDraft, Invoice, InvoiceStatus } from '@/types/database'
 import { InvoiceStatusBadge } from './InvoiceStatusBadge'
 import { ChatNotifyModal } from './ChatNotifyModal'
+import { AddInvoiceModal } from './AddInvoiceModal'
+import { BLSubmitModal } from '@/components/invoice/BLSubmitModal'
+import { BLApproveModal } from '@/components/invoice/BLApproveModal'
 
 interface Props {
-  drafts:           InvoiceDraft[]
-  savedInvoices:    Invoice[]
-  contractValueSek: number | null
-  clientName:       string | null
-  onChange:         (drafts: InvoiceDraft[]) => void
-  onStatusChange:   (invoiceId: string, status: InvoiceStatus, paidDate: string | null) => void
+  drafts:             InvoiceDraft[]
+  savedInvoices:      Invoice[]
+  contractValueSek:   number | null
+  clientName:         string | null
+  paymentTermsDays?:  number
+  clientExcludeVat?:  boolean
+  disableAdd?:        boolean
+  blBetaEnabled?:     boolean
+  isStubMode?:        boolean
+  onChange:           (drafts: InvoiceDraft[]) => void
+  onStatusChange:     (invoiceId: string, status: InvoiceStatus, paidDate: string | null) => void
+  onBLChange?:        (invoiceId: string, patch: Partial<Invoice>) => void
 }
 
-export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientName, onChange, onStatusChange }: Props) {
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientName, paymentTermsDays, clientExcludeVat, disableAdd, blBetaEnabled, isStubMode = true, onChange, onStatusChange, onBLChange }: Props) {
   const idMap = new Map(savedInvoices.map(i => [i.invoice_number, i]))
-  const [notifyIdx, setNotifyIdx] = useState<number | null>(null)
+  const [notifyIdx,    setNotifyIdx]    = useState<number | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [blSubmitInvoice,  setBLSubmitInvoice]  = useState<Invoice | null>(null)
+  const [blApproveInvoice, setBLApproveInvoice] = useState<Invoice | null>(null)
 
   function update(idx: number, patch: Partial<InvoiceDraft>) {
     const fullPatch = { ...patch }
@@ -24,22 +42,11 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
     if ('milestone_label' in patch) {
       fullPatch.payment_trigger = patch.milestone_label ? 'milestone' : 'date'
     }
+    // Auto-calculate due date when issue date changes
+    if ('issue_date' in patch && patch.issue_date && paymentTermsDays) {
+      fullPatch.due_date = addDays(patch.issue_date, paymentTermsDays)
+    }
     onChange(drafts.map((d, i) => i === idx ? { ...d, ...fullPatch } : d))
-  }
-
-  function addRow() {
-    const year = new Date().getFullYear()
-    const num  = String(drafts.length + 1).padStart(3, '0')
-    onChange([...drafts, {
-      invoice_number:  `${year}-INV-${num}`,
-      issue_date:      '',
-      due_date:        '',
-      amount_sek:      0,
-      payment_trigger: 'date',
-      milestone_label: '',
-      status:          'draft',
-      notes:           '',
-    }])
   }
 
   function removeRow(idx: number) {
@@ -57,13 +64,15 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
     <div>
       <table className="w-full table-fixed text-xs">
           <colgroup>
-            <col className="w-[13%]" /> {/* # */}
-            <col className="w-[12%]" /> {/* Issue date */}
-            <col className="w-[12%]" /> {/* Due date */}
-            <col className="w-[10%]" /> {/* Amount */}
-            <col className="w-[18%]" /> {/* Milestone */}
+            <col className="w-[12%]" /> {/* # */}
+            <col className="w-[11%]" /> {/* Issue date */}
+            <col className="w-[11%]" /> {/* Due date */}
+            <col className="w-[9%]"  /> {/* Amount */}
+            <col className="w-[8%]"  /> {/* VAT */}
+            <col className={blBetaEnabled ? 'w-[13%]' : 'w-[17%]'} /> {/* Milestone */}
             <col className="w-[11%]" /> {/* Status */}
-            <col className="w-[17%]" /> {/* Notes */}
+            <col className={blBetaEnabled ? 'w-[9%]'  : 'w-[16%]'} /> {/* Notes */}
+            {blBetaEnabled && <col className="w-[8%]" />} {/* BL */}
             <col className="w-[4%]"  /> {/* Notify */}
             <col className="w-[3%]"  /> {/* Delete */}
           </colgroup>
@@ -73,9 +82,11 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
               <th className={`${thCls} text-left`}>Issue date</th>
               <th className={`${thCls} text-left`}>Due date</th>
               <th className={`${thCls} text-right`}>kSEK</th>
+              <th className={`${thCls} text-right`} title="VAT amount (25%)">VAT</th>
               <th className={`${thCls} text-left`}>Milestone</th>
               <th className={`${thCls} text-left`}>Status</th>
               <th className={`${thCls} text-left`}>Notes</th>
+              {blBetaEnabled && <th className={`${thCls} text-left`}>BL</th>}
               <th className="py-2" />
               <th className="py-2" />
             </tr>
@@ -117,6 +128,15 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
                       placeholder="0"
                     />
                   </td>
+                  <td className={`${cellCls} text-right`}>
+                    {clientExcludeVat || d.exclude_vat ? (
+                      <span className="text-[11px] text-[#9CA3AF]">—</span>
+                    ) : d.amount_sek > 0 ? (
+                      <span className="text-[11px] text-[#6B7280] tabular-nums">
+                        {(Math.round(d.amount_sek * 0.25 / 1000 * 10) / 10).toLocaleString('sv-SE')} k
+                      </span>
+                    ) : null}
+                  </td>
                   <td className={cellCls}>
                     <input
                       value={d.milestone_label}
@@ -148,6 +168,64 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
                       className={inputCls}
                     />
                   </td>
+                  {blBetaEnabled && (
+                    <td className={`${cellCls}`}>
+                      {saved ? (() => {
+                        const blStatus = saved.bl_status
+                        if (!blStatus) {
+                          return (
+                            <button
+                              onClick={() => setBLSubmitInvoice(saved)}
+                              title="Send to Björn Lundén"
+                              className="text-[#D1D5DB] hover:text-[#0369A1] transition-colors"
+                            >
+                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                                <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.5 7.5h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3a.5.5 0 011 0v3h3a.5.5 0 010 1z"/>
+                              </svg>
+                            </button>
+                          )
+                        }
+                        return (
+                          <div className="flex items-center gap-1 group/bl">
+                            {blStatus === 'pending' && (
+                              <button
+                                onClick={() => setBLApproveInvoice(saved)}
+                                title="Pending BL approval — click to review"
+                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[#FFFBEB] text-[#B45309] hover:bg-[#FDE68A] transition-colors"
+                              >
+                                Pending
+                              </button>
+                            )}
+                            {blStatus === 'approved' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[#F0FDF4] text-[#16A34A]">
+                                BL ✓
+                              </span>
+                            )}
+                            {blStatus === 'rejected' && (
+                              <span
+                                title={saved.bl_reject_reason ?? 'Rejected'}
+                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[#FFF1F2] text-[#DC2626] cursor-default"
+                              >
+                                Rejected
+                              </span>
+                            )}
+                            <button
+                              onClick={() => setBLSubmitInvoice(saved)}
+                              title="Re-submit to BL"
+                              className="text-[#D1D5DB] hover:text-[#0369A1] transition-colors opacity-0 group-hover/bl:opacity-100"
+                            >
+                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                                <path d="M11.534 7h3.932a.25.25 0 01.192.41l-1.966 2.36a.25.25 0 01-.384 0l-1.966-2.36a.25.25 0 01.192-.41zm-11 2h3.932a.25.25 0 00.192-.41L2.692 6.23a.25.25 0 00-.384 0L.342 8.59A.25.25 0 00.534 9z"/>
+                                <path fillRule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 11-.771-.636A6.002 6.002 0 0113.917 7H12.9A5.002 5.002 0 008 3zM3.1 9a5.002 5.002 0 008.757 2.182.5.5 0 11.771.636A6.002 6.002 0 012.083 9H3.1z" clipRule="evenodd"/>
+                              </svg>
+                            </button>
+                          </div>
+                        )
+                      })() : (
+                        <span className="text-[#D1D5DB] text-[10px] italic">Save first</span>
+                      )}
+                    </td>
+                  )}
                   <td className="px-1 py-1.5">
                     <button
                       onClick={() => setNotifyIdx(i)}
@@ -177,6 +255,16 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
           </tbody>
       </table>
 
+      {showAddModal && (
+        <AddInvoiceModal
+          existingCount={drafts.length}
+          paymentTermsDays={paymentTermsDays ?? 0}
+          clientExcludeVat={clientExcludeVat ?? false}
+          onAdd={newDrafts => onChange([...drafts, ...newDrafts])}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+
       {notifyIdx !== null && drafts[notifyIdx] && (
         <ChatNotifyModal
           draft={drafts[notifyIdx]}
@@ -186,13 +274,39 @@ export function InvoiceTable({ drafts, savedInvoices, contractValueSek, clientNa
         />
       )}
 
+      {blSubmitInvoice && (
+        <BLSubmitModal
+          invoice={blSubmitInvoice}
+          onDone={patch => {
+            onBLChange?.(blSubmitInvoice.id, patch)
+            setBLSubmitInvoice(null)
+          }}
+          onClose={() => setBLSubmitInvoice(null)}
+        />
+      )}
+
+      {blApproveInvoice && (
+        <BLApproveModal
+          invoice={blApproveInvoice}
+          isStub={isStubMode}
+          onDone={patch => {
+            onBLChange?.(blApproveInvoice.id, patch)
+            setBLApproveInvoice(null)
+          }}
+          onClose={() => setBLApproveInvoice(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between px-5 py-3 border-t border-[#F3F4F6]">
-        <button
-          onClick={addRow}
-          className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#2563EB] transition-colors"
-        >
-          <span className="text-sm font-light">+</span> Add invoice
-        </button>
+        {!disableAdd && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 text-xs text-[#9CA3AF] hover:text-[#2563EB] transition-colors"
+          >
+            <span className="text-sm font-light">+</span> Add invoice
+          </button>
+        )}
+        {disableAdd && <span className="text-xs text-[#9CA3AF] italic">Reassign invoices to re-enable editing</span>}
         <div className="text-xs text-[#6B7280]">
           Total: <span className="font-semibold text-[#0F0F0F]">{Math.round(total / 1000).toLocaleString('sv-SE')} kSEK</span>
           {contractValueSek != null && diff !== null && (

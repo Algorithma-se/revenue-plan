@@ -14,11 +14,19 @@ interface UserInfo {
   avatar: string | null
 }
 
-const BASE_NAV_LINKS = [
-  { href: '/',         label: 'Work List', flag: null        },
-  { href: '/plan',     label: 'P&L Plan',  flag: null        },
-  { href: '/invoices', label: 'Invoices',  flag: 'invoices'  },
-  { href: '/faq',      label: 'FAQ',       flag: null        },
+type NavItem =
+  | { type?: undefined; href: string; label: string; flag: string | null }
+  | { type: 'sep'; id: string; flag: string | null }
+
+const BASE_NAV_ITEMS: NavItem[] = [
+  { href: '/',                 label: 'P&L Workbench',    flag: null       },
+  { href: '/plan',             label: 'P&L Overview',     flag: null       },
+  { type: 'sep', id: 'sep1',  flag: 'invoices'                            },
+  { href: '/invoice-overview', label: 'Invoice Overview', flag: 'invoices' },
+  { href: '/invoices',         label: 'Invoice Planning', flag: 'invoices' },
+  { href: '/agreements',       label: 'Agreements',       flag: 'invoices' },
+  { type: 'sep', id: 'sep2',  flag: 'invoices'                            },
+  { href: '/faq',              label: 'FAQ',              flag: null       },
 ]
 
 export default function Header() {
@@ -30,8 +38,8 @@ export default function Header() {
   const [navOpen, setNavOpen]       = useState(false)
   const [avatarError, setAvatarError] = useState(false)
 
-  const NAV_LINKS = BASE_NAV_LINKS.filter(l =>
-    l.flag !== 'invoices' || invoicesEnabled
+  const NAV_ITEMS = BASE_NAV_ITEMS.filter(item =>
+    item.flag !== 'invoices' || invoicesEnabled
   )
 
   useEffect(() => {
@@ -62,24 +70,27 @@ export default function Header() {
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2.5">
             <JOracleLogo />
-            <span className="text-[#9CA3AF] font-light text-sm hidden sm:inline">| by Algorithma</span>
           </div>
 
           {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-0.5">
-            {NAV_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === href
-                    ? 'bg-[#e6f8ff] text-[#61b5cc]'
-                    : 'text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#F9F9F8]'
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
+            {NAV_ITEMS.map(item =>
+              item.type === 'sep' ? (
+                <span key={item.id} className="text-[#D1D5DB] text-xs mx-1 select-none">|</span>
+              ) : (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    pathname === item.href
+                      ? 'bg-[#e6f8ff] text-[#61b5cc]'
+                      : 'text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#F9F9F8]'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
           </nav>
         </div>
 
@@ -169,19 +180,21 @@ export default function Header() {
       {/* Mobile nav drawer */}
       {navOpen && (
         <div className="sm:hidden border-t border-[#F3F4F6] bg-white px-4 py-2">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5 ${
-                pathname === href
-                  ? 'bg-[#e6f8ff] text-[#61b5cc]'
-                  : 'text-[#374151] hover:bg-[#F9F9F8]'
-              }`}
-            >
-              {label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map(item =>
+            item.type === 'sep' ? null : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-0.5 ${
+                  pathname === item.href
+                    ? 'bg-[#e6f8ff] text-[#61b5cc]'
+                    : 'text-[#374151] hover:bg-[#F9F9F8]'
+                }`}
+              >
+                {item.label}
+              </Link>
+            )
+          )}
         </div>
       )}
     </header>

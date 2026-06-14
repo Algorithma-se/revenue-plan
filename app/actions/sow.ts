@@ -33,7 +33,8 @@ export async function uploadSow(formData: FormData): Promise<{ data?: SowDocumen
     const versionNumber = existing && existing.length > 0 ? existing[0].version_number + 1 : 1
 
     const bytes       = Buffer.from(await file.arrayBuffer())
-    const storagePath = `${itemId}/${Date.now()}-${file.name}`
+    const safeName    = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._\-]/g, '_')
+    const storagePath = `${itemId}/${Date.now()}-${safeName}`
 
     const { error: uploadError } = await admin.storage
       .from('sow-documents')
@@ -287,6 +288,108 @@ export async function updateSowParsedFields(
   }
 }
 
+export async function updateSowTerms(
+  sowId: string,
+  fields: {
+    parsed_total_value_sek: number | null
+    parsed_start_date:      string | null
+    parsed_end_date:        string | null
+    parsed_payment_terms:   string | null
+    invoicing_model:        string | null
+    hourly_rate_sek:        number | null
+    fte_count:              number | null
+    monthly_fee_sek:        number | null
+  },
+): Promise<{ data?: SowDocument; error?: string }> {
+  try {
+    const admin = createAdminSupabase()
+    const { data: current } = await admin
+      .from('sow_documents').select('parsed_raw').eq('id', sowId).single()
+    const existing = (current?.parsed_raw ?? {}) as Record<string, unknown>
+    const updatedRaw = {
+      ...existing,
+      invoicing_model: fields.invoicing_model,
+      hourly_rate_sek: fields.hourly_rate_sek,
+      fte_count:       fields.fte_count,
+      monthly_fee_sek: fields.monthly_fee_sek,
+    }
+    const { data, error } = await admin
+      .from('sow_documents')
+      .update({
+        parsed_total_value_sek: fields.parsed_total_value_sek,
+        parsed_start_date:      fields.parsed_start_date || null,
+        parsed_end_date:        fields.parsed_end_date   || null,
+        parsed_payment_terms:   fields.parsed_payment_terms || null,
+        parsed_raw:             updatedRaw,
+        updated_at:             new Date().toISOString(),
+      })
+      .eq('id', sowId)
+      .select()
+      .single()
+    if (error) return { error: error.message }
+    return { data: data as SowDocument }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save terms' }
+  }
+}
+
+export async function createManualSowTerms(
+  itemId: string,
+  fields: {
+    parsed_total_value_sek: number | null
+    parsed_start_date:      string | null
+    parsed_end_date:        string | null
+    parsed_payment_terms:   string | null
+    invoicing_model:        string | null
+    hourly_rate_sek:        number | null
+    fte_count:              number | null
+    monthly_fee_sek:        number | null
+  },
+): Promise<{ data?: SowDocument; error?: string }> {
+  try {
+    const admin = createAdminSupabase()
+    const { data: existing } = await admin
+      .from('sow_documents')
+      .select('version_number')
+      .eq('manual_revenue_item_id', itemId)
+      .order('version_number', { ascending: false })
+      .limit(1)
+    const versionNumber = existing && existing.length > 0 ? existing[0].version_number + 1 : 1
+    const raw = {
+      client_name: null, invoicing_model: fields.invoicing_model,
+      total_value_sek: fields.parsed_total_value_sek,
+      currency: 'SEK', hourly_rate_sek: fields.hourly_rate_sek,
+      fte_count: fields.fte_count, monthly_fee_sek: fields.monthly_fee_sek,
+      invoice_timing: null, start_date: fields.parsed_start_date,
+      end_date: fields.parsed_end_date, payment_terms: fields.parsed_payment_terms,
+      deliverables: [], monthly_hours: [],
+    }
+    const { data, error } = await admin
+      .from('sow_documents')
+      .insert({
+        manual_revenue_item_id: itemId,
+        document_type:          'original',
+        version_number:         versionNumber,
+        file_name:              'Manual terms',
+        file_type:              'manual',
+        storage_path:           `${itemId}/manual-${Date.now()}`,
+        parse_status:           'done',
+        parsed_total_value_sek: fields.parsed_total_value_sek,
+        parsed_start_date:      fields.parsed_start_date || null,
+        parsed_end_date:        fields.parsed_end_date   || null,
+        parsed_payment_terms:   fields.parsed_payment_terms || null,
+        parsed_deliverables:    [],
+        parsed_raw:             raw,
+      })
+      .select()
+      .single()
+    if (error) return { error: error.message }
+    return { data: data as SowDocument }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to create terms' }
+  }
+}
+
 export async function getSowDocuments(itemId: string): Promise<SowDocument[]> {
   const supabase = await createServerSupabase()
   const { data, error } = await supabase
@@ -297,6 +400,52 @@ export async function getSowDocuments(itemId: string): Promise<SowDocument[]> {
 
   if (error) throw new Error(error.message)
   return (data ?? []) as SowDocument[]
+}
+
+export async function getAllDocumentsWithClients(): Promise<{
+  id: string
+  manual_revenue_item_id: string
+  document_type: string
+  version_number: number
+  file_name: string
+  file_type: string
+  storage_path: string
+  file_size_bytes: number | null
+  parsed_total_value_sek: number | null
+  parsed_start_date: string | null
+  parsed_end_date: string | null
+  parsed_payment_terms: string | null
+  parsed_raw: SowParsedRaw | null
+  parse_status: string
+  created_at: string
+  clientName: string | null
+  project: string | null
+}[]> {
+  const supabase = await createServerSupabase()
+  const { data, error } = await supabase
+    .from('sow_documents')
+    .select('*, manual_revenue_items(client_name, project)')
+    .order('version_number', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row: any) => ({
+    id:                     row.id,
+    manual_revenue_item_id: row.manual_revenue_item_id,
+    document_type:          row.document_type,
+    version_number:         row.version_number,
+    file_name:              row.file_name,
+    file_type:              row.file_type,
+    storage_path:           row.storage_path,
+    file_size_bytes:        row.file_size_bytes,
+    parsed_total_value_sek: row.parsed_total_value_sek,
+    parsed_start_date:      row.parsed_start_date,
+    parsed_end_date:        row.parsed_end_date,
+    parsed_payment_terms:   row.parsed_payment_terms,
+    parsed_raw:             (row.parsed_raw ?? null) as SowParsedRaw | null,
+    parse_status:           row.parse_status,
+    created_at:             row.created_at,
+    clientName:             row.manual_revenue_items?.client_name ?? null,
+    project:                row.manual_revenue_items?.project ?? null,
+  }))
 }
 
 export async function getSowDownloadUrl(storagePath: string): Promise<string> {

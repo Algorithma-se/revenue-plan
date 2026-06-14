@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import {
   getFiscalMonths, fyLabel, currentFyStart,
   monthLabel, buildRevenueRows, buildCostRows,
-  sumCells, sumAllMonths, computeClientTrend,
+  sumCells, sumAllMonths, sumByStatus, computeClientTrend,
 } from '@/lib/plan-utils'
 import type { Trend } from '@/lib/plan-utils'
 import type {
@@ -342,6 +342,18 @@ export default function PlanPage() {
     clientNames.map(name => [name, computeClientTrend(allRevenueRows, name, ytdMonths)])
   )
 
+  const threeMonths = (() => {
+    const idx = months.indexOf(curMonth)
+    const center = idx >= 0 ? idx : 0
+    return months.slice(Math.max(0, center - 1), Math.min(months.length, center + 2))
+  })()
+  const mobileRevAB  = sumByStatus(allRevenueRows, mobileMonth, ['A', 'B'])
+  const mobileCosts  = sumCells(allCostRows, mobileMonth)
+  const mobileCb1Pct = mobileRevAB > 0 ? Math.round(((mobileRevAB - mobileCosts) / mobileRevAB) * 100) : null
+  const fyRevAB      = months.reduce((s, m) => s + sumByStatus(allRevenueRows, m, ['A', 'B']), 0)
+  const fyCosts      = months.reduce((s, m) => s + sumCells(allCostRows, m), 0)
+  const fyMarginPct  = fyRevAB > 0 ? Math.round(((fyRevAB - fyCosts) / fyRevAB) * 100) : null
+
   return (
     <div className="min-h-screen bg-[#F9F9F8]">
       <div className="px-4 py-6 max-w-none">
@@ -377,26 +389,30 @@ export default function PlanPage() {
           </div>
         </div>
 
-        {/* Trend chart */}
-        <PlanChart
-          allRevenueRows={allRevenueRows}
-          allCostRows={allCostRows}
-          months={months}
-        />
+        {/* Trend chart — desktop: all 12 months, mobile: ±1 month window */}
+        <div className="hidden sm:block">
+          <PlanChart allRevenueRows={allRevenueRows} allCostRows={allCostRows} months={months} />
+        </div>
+        <div className="sm:hidden">
+          <PlanChart allRevenueRows={allRevenueRows} allCostRows={allCostRows} months={threeMonths} />
+        </div>
 
-        {/* AI Summary + Revenue Mix */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1 min-w-0">
+        {/* Allie's take + Revenue Mix (current FY only) */}
+        {!isFutureFY ? (
+          <div className="mb-6">
             <AISummary
               allRevenueRows={allRevenueRows}
               allCostRows={allCostRows}
               months={months}
+              scope="month"
+              sideContent={<RevenueDonut allRevenueRows={allRevenueRows} months={months} />}
             />
           </div>
-          <div className="sm:w-72 flex-shrink-0">
+        ) : (
+          <div className="mb-6">
             <RevenueDonut allRevenueRows={allRevenueRows} months={months} />
           </div>
-        </div>
+        )}
 
         {/* Mobile month navigator */}
         <div className="sm:hidden flex items-center justify-between mb-4 bg-white rounded-2xl border border-[#EBEBEB] px-4 py-3 shadow-sm">
@@ -448,6 +464,47 @@ export default function PlanPage() {
             )
             return <PodSection key={pod.id} {...mobileCommonProps} />
           })}
+        </div>
+
+        {/* Mobile summary card */}
+        <div className="sm:hidden mt-4 bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden shadow-sm">
+          <div className="px-4 py-2.5 bg-[#F9F9F8] border-b border-[#EBEBEB]">
+            <span className="text-xs font-bold text-[#0F0F0F] uppercase tracking-wider">Summation — {mobileLabel}</span>
+          </div>
+          <div className="p-4 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">Revenue A+B</p>
+              <p className="text-base font-bold text-[#0F0F0F]">{Math.round(mobileRevAB / 1000).toLocaleString('sv-SE')} <span className="text-xs text-[#6B7280]">kSEK</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">Costs</p>
+              <p className="text-base font-bold text-[#0F0F0F]">{Math.round(mobileCosts / 1000).toLocaleString('sv-SE')} <span className="text-xs text-[#6B7280]">kSEK</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">Margin</p>
+              <p className={`text-base font-bold ${mobileRevAB - mobileCosts >= 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'}`}>
+                {Math.round((mobileRevAB - mobileCosts) / 1000).toLocaleString('sv-SE')} <span className="text-xs text-[#6B7280]">kSEK</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">CB1%</p>
+              <p className={`text-base font-bold ${mobileCb1Pct !== null ? (mobileCb1Pct >= 20 ? 'text-[#16A34A]' : mobileCb1Pct >= 0 ? 'text-[#D97706]' : 'text-[#EF4444]') : 'text-[#9CA3AF]'}`}>
+                {mobileCb1Pct !== null ? `${mobileCb1Pct}%` : '—'}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-[#F3F4F6] px-4 py-3 grid grid-cols-2 gap-4 bg-[#FAFAFA]">
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">FY Revenue</p>
+              <p className="text-sm font-bold text-[#0F0F0F]">{Math.round(fyRevAB / 1000).toLocaleString('sv-SE')} <span className="text-xs text-[#6B7280]">k</span></p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-0.5">FY Margin %</p>
+              <p className={`text-sm font-bold ${fyMarginPct !== null ? (fyMarginPct >= 20 ? 'text-[#16A34A]' : fyMarginPct >= 0 ? 'text-[#D97706]' : 'text-[#EF4444]') : 'text-[#9CA3AF]'}`}>
+                {fyMarginPct !== null ? `${fyMarginPct}%` : '—'}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Desktop grid */}

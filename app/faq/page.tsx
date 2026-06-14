@@ -12,22 +12,26 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
     title: 'Overview',
     items: [
       {
-        q: 'What is the Revenue Plan app?',
-        a: 'A monthly income statement tool for Algorithma. It shows revenue and costs per pod across the current fiscal year (August–July), giving a live view of profitability, margin, and pipeline status.',
+        q: 'What is aSAP?',
+        a: 'aSAP (Algorithma SAP) is the internal revenue management system for Algorithma. It covers P&L planning, invoice scheduling, and agreement tracking — giving a live view of profitability, pipeline status, and the full invoice flow from plan to payment.',
       },
       {
-        q: 'What are the two main areas of the app?',
+        q: 'What are the main areas of the app?',
         a: (
           <span>
-            <strong className="text-[#0F0F0F]">Work List</strong> — items pushed from Sales Weekly that need to be allocated to months and moved into the P&amp;L.
+            <strong className="text-[#0F0F0F]">P&amp;L Workbench</strong> — items pushed from Sales Weekly that need to be allocated to months and moved into the P&amp;L.
             <br /><br />
-            <strong className="text-[#0F0F0F]">P&amp;L Plan</strong> — the full income statement grid organised by pod, showing revenue rows, cost rows, CB1%, and a summary with trend chart and AI analysis.
+            <strong className="text-[#0F0F0F]">P&amp;L Overview</strong> — the full income statement grid organised by pod, with trend chart and AI analysis.
+            <br /><br />
+            <strong className="text-[#0F0F0F]">Invoice Overview</strong> — the Finance view: all invoices in chronological order with aggregate cash flow, alert flags for overdue or unissued invoices, and full edit capability.
+            <br /><br />
+            <strong className="text-[#0F0F0F]">Invoice Planning</strong> — configuration of the invoice plan per client: upload SOWs, set agreement terms, and manage the invoice schedule.
           </span>
         ),
       },
       {
         q: 'What fiscal year does the app use?',
-        a: 'August 1 through July 31. FY 25/26 runs Aug 2025 – Jul 2026. You can navigate between fiscal years using the arrow buttons at the top right of the P&L Plan page.',
+        a: 'August 1 through July 31. FY 25/26 runs Aug 2025 – Jul 2026. You can navigate between fiscal years using the arrow buttons at the top right of the P&L Overview page.',
       },
       {
         q: 'What does kSEK mean?',
@@ -36,32 +40,32 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
     ],
   },
   {
-    title: 'Work List',
+    title: 'P&L Workbench',
     items: [
       {
-        q: 'How do items appear on the Work List?',
-        a: 'Items are pushed automatically from Sales Weekly when a forecast or booking is created or updated. The Work List is the staging area before revenue is allocated to specific months in the P&L.',
+        q: 'How do items appear on the P&L Workbench?',
+        a: 'Items are pushed automatically from Sales Weekly when a forecast or booking is created or updated. The Workbench is the staging area before revenue is allocated to specific months in the P&L.',
       },
       {
         q: 'What does it mean to allocate an item?',
-        a: 'Click any Work List item to open the allocation modal. You choose which pod it belongs to, then enter the kSEK amount per month. Once you press "Push to P&L", a revenue row is created in the P&L Plan and the item is marked as processed.',
+        a: 'Click any item to open the allocation modal. You choose which pod it belongs to, then enter the kSEK amount per month. Once you press "Push to P&L", a revenue row is created in the P&L Overview and the item is marked as processed.',
       },
       {
         q: 'What is the green checkmark button?',
-        a: 'It marks an item as processed without opening the modal — useful when the item is already in the P&L Plan from a previous push and you just want to clear it from the Work List.',
+        a: 'It marks an item as processed without opening the modal — useful when the item is already in the P&L Overview from a previous push and you just want to clear it from the Workbench.',
       },
       {
         q: 'What happens when I remove an item?',
-        a: 'Removing an item deletes it from the Work List and also removes it from Sales Weekly. Use this only if the deal is dead or entered in error.',
+        a: 'Removing an item deletes it from the Workbench and also removes it from Sales Weekly. Use this only if the deal is dead or entered in error.',
       },
       {
-        q: 'Does the Work List update automatically?',
+        q: 'Does the Workbench update automatically?',
         a: 'Yes. The page subscribes to real-time changes, so new items pushed from Sales Weekly appear without a page reload. There is also a manual refresh button in the top-right corner.',
       },
     ],
   },
   {
-    title: 'P&L Plan',
+    title: 'P&L Overview',
     items: [
       {
         q: 'What are pods?',
@@ -129,7 +133,7 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
       },
       {
         q: 'Can I view a future fiscal year?',
-        a: 'Yes — use the year navigation arrows at the top right of P&L Plan. When viewing a future year, only revenue rows that have at least one B or F cell are shown, to keep the view focused on active pipeline.',
+        a: 'Yes — use the year navigation arrows at the top right of P&L Overview. When viewing a future year, only revenue rows that have at least one B or F cell are shown, to keep the view focused on active pipeline.',
       },
       {
         q: 'Can I collapse sections to save space?',
@@ -138,18 +142,122 @@ const SECTIONS: { title: string; items: FAQItem[] }[] = [
     ],
   },
   {
-    title: 'AI Summary',
+    title: 'Invoice Overview',
     items: [
       {
-        q: 'What does the AI summary show?',
-        a: 'A short weekly analysis of firm profitability — covering current-month revenue vs costs, margin health, top client mix, the quarter outlook, and a read toward fiscal year end. It sits below the trend chart alongside the Revenue Mix donut, acting as a narrative voice-over to the numbers.',
+        q: 'Who is Invoice Overview for?',
+        a: 'The Finance team. It shows every invoice across all clients in chronological order, with a cash flow chart at the top and a searchable table below. From here you can edit any invoice, update its status, and send Google Chat notifications.',
       },
       {
-        q: 'How often does it refresh?',
-        a: 'Once per week. The summary is generated fresh on the first visit of each Monday and then cached locally in your browser for the rest of the week. Click the refresh icon next to the summary header to force a new generation at any time.',
+        q: 'What do the four summary tiles at the top show?',
+        a: (
+          <span>
+            <strong className="text-[#0F0F0F]">Total planned</strong>: sum of all invoices regardless of status.<br />
+            <strong className="text-[#0F0F0F]">Paid</strong>: invoices with status Paid.<br />
+            <strong className="text-[#0F0F0F]">Sent / outstanding</strong>: invoices that have been sent but not yet paid.<br />
+            <strong className="text-[#0F0F0F]">Needs attention</strong>: count of invoices with a red alert flag (see below).
+          </span>
+        ),
       },
       {
-        q: 'What is the status pill (On track / Watch / Below target)?',
+        q: 'What does the red alert dot on an invoice row mean?',
+        a: (
+          <span>
+            A red dot appears when an invoice needs action:
+            <br /><br />
+            • A <strong>Draft</strong> invoice whose issue date has already passed — it should have been sent by now.<br />
+            • A <strong>Draft or Sent</strong> invoice whose due date has already passed — payment is overdue.<br /><br />
+            The dot disappears automatically once the invoice is edited and saved with an updated status or date.
+          </span>
+        ),
+      },
+      {
+        q: 'How do I edit an invoice from Invoice Overview?',
+        a: 'Hover any row and click the pencil icon (or the row itself) to open the edit modal. All fields are editable: invoice number, amount, issue date, due date, milestone label, payment trigger, status (Draft / Sent / Paid), and notes. Save to update immediately.',
+      },
+      {
+        q: 'What is the chat icon on invoice rows?',
+        a: 'It opens a Google Chat notification modal pre-filled with the invoice details. You can review and send the message to the configured webhook — useful for notifying Finance or a client contact about an invoice.',
+      },
+      {
+        q: 'How does the search work?',
+        a: 'The search box filters the invoice list in real time across client name, project, invoice number, milestone label, and notes.',
+      },
+      {
+        q: 'Does the list re-sort automatically?',
+        a: 'Yes. Whenever you save an edit that changes the issue date, the list re-sorts chronologically so the order always reflects the updated dates.',
+      },
+    ],
+  },
+  {
+    title: 'Invoice Planning',
+    items: [
+      {
+        q: 'What is Invoice Planning for?',
+        a: 'Setting up and maintaining the invoice plan per client. You upload SOW/agreement documents, configure the agreement terms, and manage the invoice schedule. It is the configuration layer that feeds what Finance sees in Invoice Overview.',
+      },
+      {
+        q: 'How is the client list organised?',
+        a: 'The left sidebar shows one row per client (top-level name only), sorted alphabetically. Clicking a client opens their invoice editor on the right. A teal dot indicates the client has at least one SOW on file; a number shows how many invoices are planned.',
+      },
+      {
+        q: 'How do I upload an SOW?',
+        a: 'Select a client, then expand "Document history" and click "Upload new document". Choose the document type (Original, Amendment, or Change Request). The app will parse the PDF and extract contract terms automatically.',
+      },
+      {
+        q: 'How do I edit or set agreement terms?',
+        a: (
+          <span>
+            The client header card shows the active terms as chips (date range, payment terms, invoicing model, rate, FTE, etc.).
+            <br /><br />
+            • If no SOW is on file, a <strong>"+ Set terms"</strong> button appears — click it to enter terms manually.<br />
+            • If there is an SOW, a pencil icon appears at the end of the chips row — click it to edit the parsed terms.<br />
+            • If the client has multiple agreements with conflicting terms, the chips area shows <strong>"Multiple agreements"</strong> in amber. Click the Edit button to choose which agreement to update.
+          </span>
+        ),
+      },
+      {
+        q: 'What invoicing models are supported?',
+        a: (
+          <span>
+            <strong className="text-[#0F0F0F]">Milestone</strong>: invoiced on delivery of defined milestones.<br />
+            <strong className="text-[#0F0F0F]">Time &amp; Materials</strong>: hourly rate × hours logged; requires hourly rate and FTE count.<br />
+            <strong className="text-[#0F0F0F]">Capacity / Retainer</strong>: recurring monthly fee; requires hourly rate, FTE count, and monthly fee.<br />
+            <strong className="text-[#0F0F0F]">Fixed fee</strong>: one or more fixed-price invoices; requires monthly fee.
+          </span>
+        ),
+      },
+      {
+        q: 'How are invoices generated from an SOW?',
+        a: 'Once a document is parsed, click "Review" in Document history (or "Generate from SOW" if no invoices exist yet). The review modal shows a suggested invoice schedule based on the parsed terms. You can adjust and confirm before the invoices are created.',
+      },
+      {
+        q: 'What happens when a new amendment is uploaded?',
+        a: 'After parsing, the app compares the amendment terms with the existing invoice plan and presents a list of suggested changes (add / modify / remove). You choose which suggestions to accept before anything is committed.',
+      },
+      {
+        q: 'Can I add or edit invoices manually?',
+        a: 'Yes. The Invoice schedule table within a client lets you add rows manually, change amounts, dates, statuses, and milestone labels, then save with the Save button.',
+      },
+      {
+        q: 'What is the per-client cash flow chart?',
+        a: 'Below the invoice schedule, a chart compares the planned P&L revenue (from the Workbench allocation) against the actual invoice schedule, across a rolling 25-month window centred on today. This shows whether invoicing is aligned with the revenue plan.',
+      },
+    ],
+  },
+  {
+    title: 'Allie',
+    items: [
+      {
+        q: 'Who is Allie?',
+        a: 'Allie is aSAP\'s AI — a concise CFO assistant that gives a weekly point of view on firm profitability. She covers current-month revenue vs costs, margin health, top client mix, the quarter outlook, and a read toward fiscal year end. Her take sits in the P&L Overview below the trend chart.',
+      },
+      {
+        q: 'How often does Allie refresh?',
+        a: 'Once per week. Allie generates a fresh take on the first visit of each Monday and it is then cached locally in your browser for the rest of the week. Click the refresh icon next to the header to force a new take at any time.',
+      },
+      {
+        q: 'What is the status pill Allie shows (On track / Watch / Below target)?',
         a: (
           <span>
             Derived from the current month&apos;s margin percentage (A+B revenue vs costs):

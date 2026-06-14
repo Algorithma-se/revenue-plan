@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag, getAppSetting, setAppSetting } from '@/app/actions/admin'
+import { getBLBetaEnabled } from '@/app/actions/bl'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
 
@@ -28,6 +29,15 @@ export default function AdminPage() {
   const [webhookUrl,  setWebhookUrl]    = useState('')
   const [webhookSaving, setWebhookSaving] = useState(false)
   const [webhookSaved,  setWebhookSaved]  = useState(false)
+  const [blBetaEnabled,   setBlBetaEnabled]   = useState(false)
+  const [blBetaSaving,    setBlBetaSaving]    = useState(false)
+  const [blClientId,      setBlClientId]      = useState('')
+  const [blClientSecret,  setBlClientSecret]  = useState('')
+  const [blDatabaseGuid,  setBlDatabaseGuid]  = useState('')
+  const [blAuthUrl,       setBlAuthUrl]       = useState('')
+  const [blApiUrl,        setBlApiUrl]        = useState('')
+  const [blCredSaving,    setBlCredSaving]    = useState(false)
+  const [blCredSaved,     setBlCredSaved]     = useState(false)
 
   async function load() {
     try {
@@ -42,9 +52,23 @@ export default function AdminPage() {
     } finally {
       setLoading(false)
     }
-    // Load webhook separately — table may not exist yet
-    const webhook = await getAppSetting('revenue_plan_webhook_url')
+    // Load app settings separately — columns may not exist yet
+    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi] = await Promise.all([
+      getAppSetting('revenue_plan_webhook_url'),
+      getBLBetaEnabled(),
+      getAppSetting('bl_client_id'),
+      getAppSetting('bl_client_secret'),
+      getAppSetting('bl_database_guid'),
+      getAppSetting('bl_auth_url'),
+      getAppSetting('bl_api_url'),
+    ])
     setWebhookUrl(webhook ?? '')
+    setBlBetaEnabled(blBeta)
+    setBlClientId(blCid ?? '')
+    setBlClientSecret(blSecret ?? '')
+    setBlDatabaseGuid(blGuid ?? '')
+    setBlAuthUrl(blAuth ?? '')
+    setBlApiUrl(blApi ?? '')
   }
 
   async function handleSaveWebhook(e: React.FormEvent) {
@@ -59,6 +83,30 @@ export default function AdminPage() {
       setWebhookSaved(true)
       setTimeout(() => setWebhookSaved(false), 2000)
     }
+  }
+
+  async function handleToggleBLBeta(next: boolean) {
+    setBlBetaEnabled(next)
+    setBlBetaSaving(true)
+    const result = await setAppSetting('bl_beta_enabled', String(next))
+    setBlBetaSaving(false)
+    if (result.error) { setBlBetaEnabled(!next); setError(result.error) }
+  }
+
+  async function handleSaveBLCredentials(e: React.FormEvent) {
+    e.preventDefault()
+    setBlCredSaving(true)
+    setBlCredSaved(false)
+    await Promise.all([
+      setAppSetting('bl_client_id',     blClientId.trim()),
+      setAppSetting('bl_client_secret', blClientSecret.trim()),
+      setAppSetting('bl_database_guid', blDatabaseGuid.trim()),
+      setAppSetting('bl_auth_url',      blAuthUrl.trim()),
+      setAppSetting('bl_api_url',       blApiUrl.trim()),
+    ])
+    setBlCredSaving(false)
+    setBlCredSaved(true)
+    setTimeout(() => setBlCredSaved(false), 2000)
   }
 
   useEffect(() => { load() }, [])
@@ -219,6 +267,105 @@ export default function AdminPage() {
               {webhookSaved ? 'Saved ✓' : webhookSaving ? 'Saving…' : 'Save'}
             </button>
           </form>
+        </div>
+      </div>
+
+      {/* Björn Lundén beta */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-[#0F0F0F] mb-3">Björn Lundén (Beta)</h2>
+        <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#F3F4F6]">
+            <div>
+              <p className="text-sm font-medium text-[#0F0F0F]">BL integration</p>
+              <p className="text-xs text-[#9CA3AF] mt-0.5">
+                Show BL push button on draft invoices and enable approval workflow.
+                {!blBetaEnabled && <span className="text-[#D97706] ml-1">Currently off.</span>}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                blClientId.trim() ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#F3F4F6] text-[#9CA3AF]'
+              }`}>
+                {blClientId.trim() ? 'Configured' : 'Not configured'}
+              </span>
+              <button
+                role="switch"
+                aria-checked={blBetaEnabled}
+                onClick={() => handleToggleBLBeta(!blBetaEnabled)}
+                disabled={blBetaSaving || loading}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                  blBetaEnabled ? 'bg-[#61b5cc]' : 'bg-[#D1D5DB]'
+                }`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${blBetaEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          </div>
+
+          {blBetaEnabled && (
+            <form onSubmit={handleSaveBLCredentials} className="px-5 py-4 space-y-3">
+              <p className="text-xs text-[#9CA3AF]">OAuth 2.0 credentials for the Björn Lundén API. Leave blank to run in stub mode.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Client ID</label>
+                  <input
+                    value={blClientId}
+                    onChange={e => setBlClientId(e.target.value)}
+                    placeholder="bl_client_id"
+                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Client secret</label>
+                  <input
+                    type="password"
+                    value={blClientSecret}
+                    onChange={e => setBlClientSecret(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Database GUID</label>
+                <input
+                  value={blDatabaseGuid}
+                  onChange={e => setBlDatabaseGuid(e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Auth URL</label>
+                  <input
+                    value={blAuthUrl}
+                    onChange={e => setBlAuthUrl(e.target.value)}
+                    placeholder="https://auth.bjornlunden.se/…"
+                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">API Base URL</label>
+                  <input
+                    value={blApiUrl}
+                    onChange={e => setBlApiUrl(e.target.value)}
+                    placeholder="https://api.bjornlunden.se/…"
+                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={blCredSaving}
+                  className="px-4 py-1.5 rounded-xl bg-[#61b5cc] text-white text-sm font-medium hover:bg-[#4fa0b8] transition-colors disabled:opacity-40"
+                >
+                  {blCredSaved ? 'Saved ✓' : blCredSaving ? 'Saving…' : 'Save credentials'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
 

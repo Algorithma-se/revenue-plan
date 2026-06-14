@@ -4,21 +4,21 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 
-function JOracleMark() {
+function ASAPMark() {
   return (
-    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="cubeTop" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#A8DFF0" />
-          <stop offset="100%" stopColor="#5BBBD4" />
-        </linearGradient>
-      </defs>
-      {/* Top face — lightest */}
-      <polygon points="28,5 52,18 28,31 4,18" fill="#7ECFE8" />
-      {/* Left face — darkest */}
-      <polygon points="4,18 28,31 28,51 4,38" fill="#2E8BAA" />
-      {/* Right face — medium */}
-      <polygon points="52,18 28,31 28,51 52,38" fill="#4AAFC8" />
+    <svg width="100" height="38" viewBox="0 0 100 38" fill="none" aria-label="aSAP" role="img">
+      <rect width="100" height="38" rx="4" fill="#0B7A9E" />
+      <text
+        x="50" y="26"
+        textAnchor="middle"
+        fill="white"
+        fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        fontSize="20"
+        fontWeight="900"
+        letterSpacing="0.5"
+      >
+        aSAP
+      </text>
     </svg>
   )
 }
@@ -112,10 +112,9 @@ export default function LoginPage() {
       {/* Section 1 — Logo + Headline */}
       <div className="text-center px-6">
         <div className="flex items-center justify-center gap-4 mb-6">
-          <JOracleMark />
+          <ASAPMark />
           <div className="text-left">
-            <div className="text-[42px] font-black text-white tracking-tight leading-none">JOracle</div>
-            <div className="text-[11px] font-semibold text-[#61b5cc] uppercase tracking-[0.2em] mt-1.5">by Algorithma</div>
+            <div className="text-[11px] font-semibold text-[#61b5cc] uppercase tracking-[0.2em] mt-1">by Algorithma</div>
           </div>
         </div>
         <h1 className="text-3xl font-bold text-white leading-snug max-w-lg mx-auto mb-4">

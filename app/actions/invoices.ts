@@ -23,11 +23,12 @@ export async function getAllInvoiceItems(): Promise<{
   podId: string | null
   invoiceCount: number
   hasSow: boolean
+  excludeVat: boolean
 }[]> {
   const supabase = await createServerSupabase()
 
   const [{ data: itemData }, { data: invData }, { data: sowData }] = await Promise.all([
-    supabase.from('manual_revenue_items').select('id, client_name, project, pod_id').order('sort'),
+    supabase.from('manual_revenue_items').select('id, client_name, project, pod_id, exclude_vat').order('sort'),
     supabase.from('invoices').select('manual_revenue_item_id'),
     supabase.from('sow_documents').select('manual_revenue_item_id'),
   ])
@@ -38,14 +39,23 @@ export async function getAllInvoiceItems(): Promise<{
   }
   const sowItemIds = new Set((sowData ?? []).map((r: { manual_revenue_item_id: string }) => r.manual_revenue_item_id))
 
-  return (itemData ?? []).map((item: { id: string; client_name: string | null; project: string | null; pod_id: string | null }) => ({
+  return (itemData ?? []).map((item: any) => ({
     itemId:       item.id,
     clientName:   item.client_name,
     project:      item.project,
     podId:        item.pod_id,
     invoiceCount: invCounts.get(item.id) ?? 0,
     hasSow:       sowItemIds.has(item.id),
+    excludeVat:   item.exclude_vat ?? false,
   }))
+}
+
+export async function setClientVat(itemId: string, excludeVat: boolean): Promise<void> {
+  const supabase = await createServerSupabase()
+  await Promise.all([
+    supabase.from('manual_revenue_items').update({ exclude_vat: excludeVat }).eq('id', itemId),
+    supabase.from('invoices').update({ exclude_vat: excludeVat }).eq('manual_revenue_item_id', itemId),
+  ])
 }
 
 export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: Invoice[]; error?: string }> {
@@ -99,6 +109,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         paid_date:              null,
         notes:                  null,
         sort:                   i,
+    exclude_vat:            false,
+    client_name:            null,
       })
     })
 
@@ -129,6 +141,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         paid_date:              null,
         notes:                  null,
         sort:                   i,
+    exclude_vat:            false,
+    client_name:            null,
       })
     })
 
@@ -155,6 +169,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         paid_date:              null,
         notes:                  null,
         sort:                   i,
+    exclude_vat:            false,
+    client_name:            null,
       })
     }
 
@@ -178,6 +194,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         paid_date:              null,
         notes:                  null,
         sort:                   i,
+    exclude_vat:            false,
+    client_name:            null,
       })
     })
 
@@ -200,6 +218,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
         paid_date:              null,
         notes:                  null,
         sort:                   i,
+    exclude_vat:            false,
+    client_name:            null,
       })
     }
 
@@ -218,6 +238,8 @@ export async function generateInvoiceSchedule(sowId: string): Promise<{ data?: I
       paid_date:              null,
       notes:                  null,
       sort:                   0,
+      exclude_vat:            false,
+    client_name:            null,
     })
   }
 
@@ -265,12 +287,96 @@ export async function saveInvoices(
     status:                 d.status,
     paid_date:              null,
     notes:                  d.notes || null,
+    exclude_vat:            d.exclude_vat ?? false,
     sort:                   i,
   }))
 
   const { data, error } = await supabase.from('invoices').insert(rows).select()
   if (error) throw new Error(error.message)
   return (data ?? []) as Invoice[]
+}
+
+export async function getInvoicesByClientName(clientName: string): Promise<Invoice[]> {
+  const supabase = await createServerSupabase()
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('client_name', clientName)
+    .order('sort', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Invoice[]
+}
+
+export async function getUnassignedInvoices(): Promise<Invoice[]> {
+  const supabase = await createServerSupabase()
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .is('manual_revenue_item_id', null)
+    .order('issue_date', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Invoice[]
+}
+
+// Upsert-based save: updates existing invoices in place, inserts new ones,
+// deletes those that were removed. Preserves each invoice's original item link.
+export async function saveInvoicesForClient(
+  primaryItemId: string | null,
+  clientName:    string,
+  drafts:        InvoiceDraft[],
+  sowDocumentId: string | null,
+  originalIds:   string[],   // IDs of invoices loaded at the start of the edit session
+): Promise<Invoice[]> {
+  const supabase = await createServerSupabase()
+
+  const currentIds  = new Set(drafts.filter(d => d.id).map(d => d.id!))
+  const deletedIds  = originalIds.filter(id => !currentIds.has(id))
+  if (deletedIds.length > 0) {
+    await supabase.from('invoices').delete().in('id', deletedIds)
+  }
+
+  if (drafts.length === 0) return []
+
+  const upsertRows = drafts.map((d, i) => ({
+    ...(d.id ? { id: d.id } : {}),
+    manual_revenue_item_id: d.id ? undefined : primaryItemId,  // keep original for existing
+    sow_document_id:        d.id ? undefined : sowDocumentId,
+    client_name:            clientName,
+    invoice_number:         d.invoice_number,
+    issue_date:             d.issue_date,
+    due_date:               d.due_date,
+    amount_sek:             d.amount_sek,
+    payment_trigger:        d.payment_trigger,
+    milestone_label:        d.milestone_label || null,
+    status:                 d.status,
+    notes:                  d.notes || null,
+    exclude_vat:            d.exclude_vat ?? false,
+    sort:                   i,
+    updated_at:             new Date().toISOString(),
+  }))
+
+  const newRows      = upsertRows.filter(r => !r.id).map(r => {
+    const { id: _, ...rest } = r as any
+    return { ...rest, manual_revenue_item_id: primaryItemId, sow_document_id: sowDocumentId }
+  })
+  const existingRows = upsertRows.filter(r => r.id).map(r => {
+    const { manual_revenue_item_id: _, sow_document_id: __, ...rest } = r as any
+    return rest
+  })
+
+  const results: Invoice[] = []
+  if (existingRows.length > 0) {
+    const { data, error } = await supabase.from('invoices').upsert(existingRows, { onConflict: 'id' }).select()
+    if (error) throw new Error(error.message)
+    results.push(...((data ?? []) as Invoice[]))
+  }
+  if (newRows.length > 0) {
+    const { data, error } = await supabase.from('invoices').insert(newRows).select()
+    if (error) throw new Error(error.message)
+    results.push(...((data ?? []) as Invoice[]))
+  }
+
+  return results.sort((a, b) => a.sort - b.sort)
 }
 
 export async function updateInvoiceStatus(
@@ -363,16 +469,19 @@ export async function getAggregatedCashFlow(): Promise<{
   planByMonth:     Record<string, number>
   invoicedByMonth: Record<string, number>
   expectedByMonth: Record<string, number>
+  costsByMonth:    Record<string, number>
 }> {
   const supabase = await createServerSupabase()
-  const [{ data: cells }, { data: invs }] = await Promise.all([
+  const [{ data: cells }, { data: invs }, { data: costCells }] = await Promise.all([
     supabase.from('plan_revenue_cells').select('month, amount'),
     supabase.from('invoices').select('issue_date, due_date, paid_date, amount_sek, status'),
+    supabase.from('plan_cost_cells').select('month, amount'),
   ])
 
   const planByMonth:     Record<string, number> = {}
   const invoicedByMonth: Record<string, number> = {}
   const expectedByMonth: Record<string, number> = {}
+  const costsByMonth:    Record<string, number> = {}
 
   for (const c of (cells ?? [])) {
     const m = c.month.slice(0, 7) + '-01'
@@ -385,8 +494,121 @@ export async function getAggregatedCashFlow(): Promise<{
     const em = cashDate.slice(0, 7) + '-01'
     expectedByMonth[em] = (expectedByMonth[em] ?? 0) + inv.amount_sek
   }
+  for (const c of (costCells ?? [])) {
+    const m = c.month.slice(0, 7) + '-01'
+    costsByMonth[m] = (costsByMonth[m] ?? 0) + c.amount
+  }
 
-  return { planByMonth, invoicedByMonth, expectedByMonth }
+  return { planByMonth, invoicedByMonth, expectedByMonth, costsByMonth }
+}
+
+export async function getBankBalanceEntries(): Promise<Record<string, number>> {
+  const supabase = await createServerSupabase()
+  const { data } = await supabase
+    .from('bank_balance_entries')
+    .select('month, balance_sek')
+  const result: Record<string, number> = {}
+  for (const row of (data ?? [])) result[row.month] = row.balance_sek
+  return result
+}
+
+export async function setBankBalanceEntry(month: string, balance: number): Promise<void> {
+  const supabase = await createServerSupabase()
+  await supabase
+    .from('bank_balance_entries')
+    .upsert({ month, balance_sek: balance, updated_at: new Date().toISOString() }, { onConflict: 'month' })
+}
+
+export async function deleteBankBalanceEntry(month: string): Promise<void> {
+  const supabase = await createServerSupabase()
+  await supabase.from('bank_balance_entries').delete().eq('month', month)
+}
+
+export async function getAllInvoicesWithClients(): Promise<{
+  id: string
+  invoice_number: string
+  issue_date: string
+  due_date: string
+  paid_date: string | null
+  amount_sek: number
+  payment_trigger: string
+  milestone_label: string | null
+  status: string
+  notes: string | null
+  exclude_vat: boolean
+  clientName: string | null
+  project: string | null
+  bl_status:          string | null
+  bl_invoice_id:      string | null
+  bl_line_desc:       string | null
+  bl_reject_reason:   string | null
+  bl_rejected_at:     string | null
+  bl_your_reference:  string | null
+  bl_our_reference:   string | null
+  bl_po_number:       string | null
+  bl_marking:         string | null
+}[]> {
+  const supabase = await createServerSupabase()
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('id, invoice_number, issue_date, due_date, paid_date, amount_sek, payment_trigger, milestone_label, status, notes, exclude_vat, client_name, bl_status, bl_invoice_id, bl_line_desc, bl_reject_reason, bl_rejected_at, bl_your_reference, bl_our_reference, bl_po_number, bl_marking, manual_revenue_items(client_name, project)')
+    // Note: invoices.client_name (denormalized) is used as fallback when join is null
+    .order('issue_date', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row: any) => ({
+    id:              row.id,
+    invoice_number:  row.invoice_number,
+    issue_date:      row.issue_date,
+    due_date:        row.due_date,
+    paid_date:       row.paid_date ?? null,
+    amount_sek:      row.amount_sek,
+    payment_trigger: row.payment_trigger,
+    milestone_label: row.milestone_label,
+    status:          row.status,
+    notes:           row.notes,
+    exclude_vat:     row.exclude_vat ?? false,
+    // Prefer denormalized client_name (survives item deletion) over join
+    clientName:       row.manual_revenue_items?.client_name ?? row.client_name ?? null,
+    project:          row.manual_revenue_items?.project ?? null,
+    bl_status:        row.bl_status        ?? null,
+    bl_invoice_id:    row.bl_invoice_id    ?? null,
+    bl_line_desc:     row.bl_line_desc     ?? null,
+    bl_reject_reason: row.bl_reject_reason ?? null,
+    bl_rejected_at:   row.bl_rejected_at   ?? null,
+    bl_your_reference: row.bl_your_reference ?? null,
+    bl_our_reference:  row.bl_our_reference  ?? null,
+    bl_po_number:      row.bl_po_number      ?? null,
+    bl_marking:        row.bl_marking        ?? null,
+  }))
+}
+
+export async function updateInvoice(
+  id: string,
+  fields: {
+    invoice_number:          string
+    issue_date:              string
+    due_date:                string
+    amount_sek:              number
+    payment_trigger:         string
+    milestone_label:         string | null
+    status:                  InvoiceStatus
+    notes:                   string | null
+    exclude_vat:             boolean
+    client_name?:            string | null
+    manual_revenue_item_id?: string | null
+  },
+): Promise<{ error?: string }> {
+  try {
+    const supabase = await createServerSupabase()
+    const { error } = await supabase
+      .from('invoices')
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) return { error: error.message }
+    return {}
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to update invoice' }
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -482,4 +704,59 @@ export async function sendGoogleChatNotification(
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Failed to send notification' }
   }
+}
+
+export interface ImportInvoiceRow {
+  clientName:  string
+  invoiceNumber: string
+  issueDate:   string   // YYYY-MM-DD
+  dueDate:     string   // YYYY-MM-DD
+  amountSek:   number   // already in SEK (user enters kSEK, UI converts)
+  label:       string | null
+  notes:       string | null
+  status:      InvoiceStatus
+}
+
+export async function importInvoices(
+  rows: ImportInvoiceRow[],
+): Promise<{ imported: number; unmatched: string[] }> {
+  const supabase = await createServerSupabase()
+
+  // Build client name → first matching item ID map
+  const { data: items } = await supabase
+    .from('manual_revenue_items')
+    .select('id, client_name')
+  const clientMap = new Map<string, string>()
+  for (const item of (items ?? [])) {
+    if (item.client_name && !clientMap.has(item.client_name.toLowerCase())) {
+      clientMap.set(item.client_name.toLowerCase(), item.id)
+    }
+  }
+
+  const unmatched = new Set<string>()
+  const toInsert = rows.map((r, i) => {
+    const itemId = clientMap.get(r.clientName.toLowerCase()) ?? null
+    if (!itemId) unmatched.add(r.clientName)
+    return {
+      manual_revenue_item_id: itemId,
+      client_name:            r.clientName,
+      sow_document_id:        null,
+      invoice_number:         r.invoiceNumber,
+      issue_date:             r.issueDate,
+      due_date:               r.dueDate,
+      amount_sek:             r.amountSek,
+      payment_trigger:        'date' as const,
+      milestone_label:        r.label || null,
+      status:                 r.status,
+      paid_date:              null,
+      notes:                  r.notes || null,
+      exclude_vat:            false,
+      sort:                   i,
+    }
+  })
+
+  const { error } = await supabase.from('invoices').insert(toInsert)
+  if (error) throw new Error(error.message)
+
+  return { imported: toInsert.length, unmatched: [...unmatched] }
 }

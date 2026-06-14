@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { InvoiceDraft, Invoice } from '@/types/database'
 import { sendGoogleChatNotification } from '@/app/actions/invoices'
+import { supabase } from '@/lib/supabase'
 
 interface Props {
   draft:       InvoiceDraft
@@ -11,12 +12,14 @@ interface Props {
   onClose:     () => void
 }
 
-function buildMessage(draft: InvoiceDraft, clientName: string | null): string {
+function buildMessage(draft: InvoiceDraft, clientName: string | null, senderName: string | null): string {
   const amount = draft.amount_sek ? `${Math.round(draft.amount_sek / 1000).toLocaleString('sv-SE')} kSEK` : '—'
-  const lines: string[] = [
+  const lines: string[] = []
+  if (senderName) lines.push(`👤 Notification from: ${senderName}`)
+  lines.push(
     `🧾 *${draft.invoice_number}*${clientName ? ` — ${clientName}` : ''}`,
     `💰 ${amount}   •   Status: ${draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}`,
-  ]
+  )
   if (draft.issue_date) lines.push(`📅 Issue date: ${draft.issue_date}`)
   if (draft.due_date)   lines.push(`⏰ Due date: ${draft.due_date}`)
   if (draft.milestone_label) lines.push(`🎯 Milestone: ${draft.milestone_label}`)
@@ -25,7 +28,15 @@ function buildMessage(draft: InvoiceDraft, clientName: string | null): string {
 }
 
 export function ChatNotifyModal({ draft, saved, clientName, onClose }: Props) {
-  const [message, setMessage] = useState(() => buildMessage(draft, clientName))
+  const [message, setMessage] = useState(() => buildMessage(draft, clientName, null))
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? null
+      setMessage(buildMessage(draft, clientName, name))
+    })
+  }, [draft, clientName])
   const [sending, setSending] = useState(false)
   const [sent,    setSent]    = useState(false)
   const [error,   setError]   = useState<string | null>(null)

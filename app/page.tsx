@@ -169,7 +169,7 @@ export default function WorkListPage() {
     <div>
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[#0F0F0F] tracking-tight">Work List</h1>
+          <h1 className="text-3xl font-bold text-[#0F0F0F] tracking-tight">P&L Workbench</h1>
           <p className="text-sm text-[#6B7280] mt-1">Revenue pushed from Sales Weekly — allocate to months for P&L.</p>
         </div>
         <button

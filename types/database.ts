@@ -152,9 +152,11 @@ export interface SowDocument {
   updated_at: string
 }
 
+export type BLStatus = 'pending' | 'approved' | 'rejected'
+
 export interface Invoice {
   id: string
-  manual_revenue_item_id: string
+  manual_revenue_item_id: string | null
   sow_document_id: string | null
   invoice_number: string
   issue_date: string
@@ -165,9 +167,20 @@ export interface Invoice {
   status: InvoiceStatus
   paid_date: string | null
   notes: string | null
+  exclude_vat: boolean
+  client_name: string | null
   sort: number
   created_at: string
   updated_at: string
+  bl_status?:          BLStatus | null
+  bl_invoice_id?:      string | null
+  bl_line_desc?:       string | null
+  bl_reject_reason?:   string | null
+  bl_rejected_at?:     string | null
+  bl_your_reference?:  string | null
+  bl_our_reference?:   string | null
+  bl_po_number?:       string | null
+  bl_marking?:         string | null
 }
 
 export interface InvoiceDraft {
@@ -180,6 +193,7 @@ export interface InvoiceDraft {
   milestone_label: string
   status: InvoiceStatus
   notes: string
+  exclude_vat?: boolean
 }
 
 export type SuggestionAction = 'add' | 'modify' | 'remove'
