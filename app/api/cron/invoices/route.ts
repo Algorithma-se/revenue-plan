@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase-admin'
 import { sendGoogleChatNotification } from '@/app/actions/invoices'
 import { getAllieInvoiceEnabled, initiateAllieInvoices } from '@/app/actions/bl'
+import { getAppSetting } from '@/app/actions/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,11 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const cronEnabled = await getAppSetting('cron_enabled')
+  if (cronEnabled === 'false') {
+    return NextResponse.json({ ok: true, sent: false, reason: 'cron disabled by admin' })
   }
 
   const today = new Date().toISOString().slice(0, 10)

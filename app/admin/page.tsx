@@ -41,6 +41,8 @@ export default function AdminPage() {
   const [blCredSaved,          setBlCredSaved]          = useState(false)
   const [allieInvoiceEnabled,  setAllieInvoiceEnabled]  = useState(false)
   const [allieInvoiceSaving,   setAllieInvoiceSaving]   = useState(false)
+  const [cronEnabled,          setCronEnabled]          = useState(true)
+  const [cronSaving,           setCronSaving]           = useState(false)
   const [allieRunning,         setAllieRunning]         = useState(false)
   const [allieResult,          setAllieResult]          = useState<{ initiated: number; errors: string[] } | null>(null)
   const [testChatMsg,          setTestChatMsg]          = useState('')
@@ -61,7 +63,7 @@ export default function AdminPage() {
       setLoading(false)
     }
     // Load app settings separately — columns may not exist yet
-    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi, allieInv] = await Promise.all([
+    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi, allieInv, cronFlag] = await Promise.all([
       getAppSetting('revenue_plan_webhook_url'),
       getBLBetaEnabled(),
       getAppSetting('bl_client_id'),
@@ -70,6 +72,7 @@ export default function AdminPage() {
       getAppSetting('bl_auth_url'),
       getAppSetting('bl_api_url'),
       getAllieInvoiceEnabled(),
+      getAppSetting('cron_enabled'),
     ])
     setWebhookUrl(webhook ?? '')
     setBlBetaEnabled(blBeta)
@@ -79,6 +82,7 @@ export default function AdminPage() {
     setBlAuthUrl(blAuth ?? '')
     setBlApiUrl(blApi ?? '')
     setAllieInvoiceEnabled(allieInv)
+    setCronEnabled(cronFlag !== 'false')
   }
 
   async function handleSaveWebhook(e: React.FormEvent) {
@@ -109,6 +113,14 @@ export default function AdminPage() {
     const result = await setAppSetting('allie_invoice_enabled', String(next))
     setAllieInvoiceSaving(false)
     if (result.error) { setAllieInvoiceEnabled(!next); setError(result.error) }
+  }
+
+  async function handleToggleCron(next: boolean) {
+    setCronEnabled(next)
+    setCronSaving(true)
+    const result = await setAppSetting('cron_enabled', String(next))
+    setCronSaving(false)
+    if (result.error) { setCronEnabled(!next); setError(result.error) }
   }
 
   async function handleSaveBLCredentials(e: React.FormEvent) {
@@ -413,6 +425,28 @@ export default function AdminPage() {
         <h2 className="text-sm font-semibold text-[#0F0F0F] mb-1">Testing</h2>
         <p className="text-xs text-[#9CA3AF] mb-3">Manually trigger flows without waiting for the cron schedule.</p>
         <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden divide-y divide-[#F3F4F6]">
+
+          {/* Cron enabled toggle */}
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-[#0F0F0F]">Cron jobs</p>
+              <p className="text-xs text-[#9CA3AF] mt-0.5">
+                When off, the Mon/Fri cron runs are silently skipped — no digest, no Allie initiation.
+                {!cronEnabled && <span className="ml-1 text-[#D97706] font-medium">Currently paused.</span>}
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={cronEnabled}
+              onClick={() => handleToggleCron(!cronEnabled)}
+              disabled={cronSaving}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                cronEnabled ? 'bg-[#61b5cc]' : 'bg-[#D1D5DB]'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${cronEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
 
           {/* Trigger Allie */}
           <div className="px-5 py-4">
