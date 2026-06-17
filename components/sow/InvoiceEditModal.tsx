@@ -233,8 +233,8 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
             </div>
           </div>
 
-          {/* Issue + Net days + Due date */}
-          <div className="grid grid-cols-[1fr_80px_1fr] gap-3">
+          {/* Issue + Payment terms + Due date */}
+          <div className="grid grid-cols-[1fr_1fr_1fr] gap-3">
             <div>
               <label className={labelCls}>Issue date</label>
               <input
@@ -245,14 +245,18 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
               />
             </div>
             <div>
-              <label className={labelCls}>Net days</label>
-              <input
-                type="number"
-                value={netDays}
-                min={0}
-                onChange={e => handleNetDaysChange(Number(e.target.value))}
-                className={`${inputCls} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none text-center`}
-              />
+              <label className={labelCls}>Payment terms</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={netDays}
+                  min={0}
+                  onChange={e => handleNetDaysChange(Number(e.target.value))}
+                  className={`${inputCls} pr-10 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF] pointer-events-none">days</span>
+              </div>
+              <p className="mt-1 text-[10px] text-[#9CA3AF]">Payment terms · {netDays} days</p>
             </div>
             <div>
               <label className={labelCls}>Due date</label>
