@@ -350,12 +350,18 @@ function InvoiceOverviewContent() {
       .filter(i => i.status === 'sent')
       .reduce((s, i) => s + i.amount_sek, 0)
 
-    // 1700 — Upplupna: recognised in P&L but not yet invoiced (past months only)
+    // 1700 — Upplupna: recognised in P&L but not yet invoiced (sent/paid only — drafts don't count)
     const todayM = new Date().toISOString().slice(0, 7) + '-01'
+    const billedByMonth: Record<string, number> = {}
+    for (const inv of invoices) {
+      if (inv.status !== 'sent' && inv.status !== 'paid') continue
+      const m = inv.issue_date.slice(0, 7) + '-01'
+      billedByMonth[m] = (billedByMonth[m] ?? 0) + inv.amount_sek
+    }
     let accrued = 0
     for (const m of ROLLING_MONTHS) {
       if (m > todayM) break
-      const gap = (aggData.planByMonth[m] ?? 0) - (aggData.invoicedByMonth[m] ?? 0)
+      const gap = (aggData.planByMonth[m] ?? 0) - (billedByMonth[m] ?? 0)
       if (gap > 0) accrued += gap
     }
 
