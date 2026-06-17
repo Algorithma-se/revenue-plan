@@ -30,6 +30,7 @@ export interface InvoiceEditData {
   bl_po_number?:            string | null
   bl_marking?:              string | null
   bl_allie_initiated?:      boolean | null
+  payment_terms_days?:      number | null
 }
 
 interface ClientOption { itemId: string; clientName: string | null }
@@ -74,6 +75,7 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
   const [showChat, setShowChat] = useState(false)
 
   const [netDays, setNetDays] = useState<number>(() => {
+    if (invoice.payment_terms_days != null) return invoice.payment_terms_days
     if (invoice.issue_date && invoice.due_date) return Math.max(0, diffDays(invoice.issue_date, invoice.due_date))
     return paymentTermsDays ?? 30
   })
@@ -115,6 +117,7 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
       exclude_vat:             form.exclude_vat,
       client_name:             form.clientName,
       manual_revenue_item_id:  form.manual_revenue_item_id,
+      payment_terms_days:      netDays,
     })
     setSaving(false)
     if (result.error) {

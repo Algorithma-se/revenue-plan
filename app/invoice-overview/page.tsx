@@ -325,12 +325,15 @@ function InvoiceOverviewContent() {
   const paymentTermsByMonth = useMemo(() => {
     const acc: Record<string, { wSum: number; total: number }> = {}
     for (const inv of invoices) {
-      if (!inv.issue_date || !inv.due_date) continue
-      const m    = inv.issue_date.slice(0, 7) + '-01'
-      const days = Math.round(
-        (new Date(inv.due_date).getTime() - new Date(inv.issue_date).getTime()) / 86_400_000
-      )
-      if (days < 0) continue
+      if (!inv.issue_date) continue
+      const m = inv.issue_date.slice(0, 7) + '-01'
+      // Prefer explicit payment_terms_days; fall back to due_date − issue_date
+      const days = inv.payment_terms_days != null
+        ? inv.payment_terms_days
+        : inv.due_date
+          ? Math.round((new Date(inv.due_date).getTime() - new Date(inv.issue_date).getTime()) / 86_400_000)
+          : null
+      if (days == null || days < 0) continue
       if (!acc[m]) acc[m] = { wSum: 0, total: 0 }
       acc[m].wSum  += days * inv.amount_sek
       acc[m].total += inv.amount_sek
