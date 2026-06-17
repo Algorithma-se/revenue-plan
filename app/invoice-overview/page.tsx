@@ -342,62 +342,6 @@ function InvoiceOverviewContent() {
     return out
   }, [invoices])
 
-  const dsoMetrics = useMemo(() => {
-    if (!aggData) return null
-
-    // 1510 — Kundfordringar: sent but unpaid
-    const ar = invoices
-      .filter(i => i.status === 'sent')
-      .reduce((s, i) => s + i.amount_sek, 0)
-
-    // 1700 — Upplupna: recognised in P&L but not yet invoiced (sent/paid only — drafts don't count)
-    const todayM = new Date().toISOString().slice(0, 7) + '-01'
-    const billedByMonth: Record<string, number> = {}
-    for (const inv of invoices) {
-      if (inv.status !== 'sent' && inv.status !== 'paid') continue
-      const m = inv.issue_date.slice(0, 7) + '-01'
-      billedByMonth[m] = (billedByMonth[m] ?? 0) + inv.amount_sek
-    }
-    let accrued = 0
-    for (const m of ROLLING_MONTHS) {
-      if (m > todayM) break
-      const gap = (aggData.planByMonth[m] ?? 0) - (billedByMonth[m] ?? 0)
-      if (gap > 0) accrued += gap
-    }
-
-    // Månadsoms: trailing 3-month average of recognised revenue
-    const past3 = ROLLING_MONTHS
-      .filter(m => m <= todayM)
-      .slice(-3)
-      .map(m => aggData.planByMonth[m] ?? 0)
-    const monthlyRev = past3.length > 0
-      ? past3.reduce((s, v) => s + v, 0) / past3.length
-      : 0
-
-    if (monthlyRev === 0) return null
-
-    // Portfolio-wide weighted avg payment terms
-    let wSum = 0, wTotal = 0
-    for (const inv of invoices) {
-      if (!inv.issue_date || !inv.due_date) continue
-      const days = Math.round(
-        (new Date(inv.due_date).getTime() - new Date(inv.issue_date).getTime()) / 86_400_000
-      )
-      if (days < 0) continue
-      wSum   += days * inv.amount_sek
-      wTotal += inv.amount_sek
-    }
-    const portfolioAvgTerms = wTotal > 0 ? Math.round(wSum / wTotal) : null
-
-    return {
-      dso1: Math.round((ar / monthlyRev) * 30),
-      dso2: Math.round(((ar + accrued) / monthlyRev) * 30),
-      ar,
-      accrued,
-      monthlyRev,
-      portfolioAvgTerms,
-    }
-  }, [invoices, aggData])
 
   if (!invoicesEnabled) {
     return (
@@ -472,55 +416,6 @@ function InvoiceOverviewContent() {
                 {alertCount}
                 <span className="text-xs font-semibold text-[#9CA3AF] ml-1">invoice{alertCount !== 1 ? 's' : ''}</span>
               </p>
-            </div>
-          </div>
-        )}
-
-        {/* DSO snapshot card */}
-        {!loading && dsoMetrics && (
-          <div className="bg-white rounded-2xl border border-[#E5E7EB] px-5 py-4 shadow-sm">
-            <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest mb-3">DSO snapshot</p>
-            <div className="flex flex-wrap gap-6 items-start justify-between">
-              <div className="flex gap-8">
-                <div>
-                  <p className="text-2xl font-bold text-[#0F0F0F]">
-                    {dsoMetrics.dso1}
-                    <span className="text-sm font-semibold text-[#9CA3AF] ml-1">days</span>
-                  </p>
-                  <p className="text-[11px] text-[#9CA3AF] mt-0.5">
-                    AR only <span className="opacity-60">(1510 / oms × 30)</span>
-                  </p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#0F0F0F]">
-                    {dsoMetrics.dso2}
-                    <span className="text-sm font-semibold text-[#9CA3AF] ml-1">days</span>
-                  </p>
-                  <p className="text-[11px] text-[#9CA3AF] mt-0.5">
-                    inkl. upplupna <span className="opacity-60">((1510+1700) / oms × 30)</span>
-                  </p>
-                </div>
-              </div>
-              <div className="text-xs text-[#6B7280] space-y-1 min-w-[200px]">
-                <div className="flex justify-between gap-6">
-                  <span>Kundfordringar (1510)</span>
-                  <span className="font-medium text-[#374151]">{Math.round(dsoMetrics.ar / 1000).toLocaleString('sv-SE')} kSEK</span>
-                </div>
-                <div className="flex justify-between gap-6">
-                  <span>Upplupna (1700)</span>
-                  <span className="font-medium text-[#374151]">{Math.round(dsoMetrics.accrued / 1000).toLocaleString('sv-SE')} kSEK</span>
-                </div>
-                <div className="flex justify-between gap-6">
-                  <span>Månadsoms (3-mån snitt)</span>
-                  <span className="font-medium text-[#374151]">{Math.round(dsoMetrics.monthlyRev / 1000).toLocaleString('sv-SE')} kSEK</span>
-                </div>
-                {dsoMetrics.portfolioAvgTerms != null && (
-                  <div className="flex justify-between gap-6 pt-1 border-t border-[#F3F4F6]">
-                    <span>Avg. betalningstid (viktat)</span>
-                    <span className="font-medium text-[#374151]">{dsoMetrics.portfolioAvgTerms} d</span>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         )}
