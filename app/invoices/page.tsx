@@ -659,7 +659,7 @@ function InvoicesContent() {
                       )}
                       {latestSow.parsed_payment_terms && (
                         <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded-full bg-[#F3F4F6] text-[#374151]">
-                          {latestSow.parsed_payment_terms}
+                          Net {latestSow.parsed_payment_terms} days
                         </span>
                       )}
                       {latestRaw?.invoicing_model && (
