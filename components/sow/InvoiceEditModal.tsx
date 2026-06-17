@@ -57,6 +57,12 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+function diffDays(from: string, to: string): number {
+  return Math.round(
+    (new Date(to + 'T12:00:00').getTime() - new Date(from + 'T12:00:00').getTime()) / 86_400_000
+  )
+}
+
 export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, onClose }: Props) {
   const [form, setForm] = useState({ ...invoice })
   // Deduplicate client options by name
@@ -67,12 +73,31 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
   const [error,    setError]    = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
 
+  const [netDays, setNetDays] = useState<number>(() => {
+    if (invoice.issue_date && invoice.due_date) return Math.max(0, diffDays(invoice.issue_date, invoice.due_date))
+    return paymentTermsDays ?? 30
+  })
+
   function patch(p: Partial<typeof form>) {
     const extra: Partial<typeof form> = {}
-    if ('issue_date' in p && p.issue_date && paymentTermsDays) {
-      extra.due_date = addDays(p.issue_date, paymentTermsDays)
+    if ('issue_date' in p && p.issue_date && netDays >= 0) {
+      extra.due_date = addDays(p.issue_date, netDays)
     }
     setForm(prev => ({ ...prev, ...extra, ...p }))
+  }
+
+  function handleNetDaysChange(days: number) {
+    setNetDays(days)
+    if (form.issue_date && days >= 0) {
+      setForm(prev => ({ ...prev, due_date: addDays(form.issue_date, days) }))
+    }
+  }
+
+  function handleDueDateChange(due: string) {
+    if (form.issue_date && due) {
+      setNetDays(Math.max(0, diffDays(form.issue_date, due)))
+    }
+    setForm(prev => ({ ...prev, due_date: due }))
   }
 
   async function handleSave() {
@@ -205,8 +230,8 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
             </div>
           </div>
 
-          {/* Issue + Due dates */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Issue + Net days + Due date */}
+          <div className="grid grid-cols-[1fr_80px_1fr] gap-3">
             <div>
               <label className={labelCls}>Issue date</label>
               <input
@@ -217,13 +242,21 @@ export function InvoiceEditModal({ invoice, paymentTermsDays, clients, onSaved, 
               />
             </div>
             <div>
-              <label className={labelCls}>
-                Due date{paymentTermsDays ? <span className="ml-1 font-normal normal-case opacity-60">Net {paymentTermsDays} auto</span> : ''}
-              </label>
+              <label className={labelCls}>Net days</label>
+              <input
+                type="number"
+                value={netDays}
+                min={0}
+                onChange={e => handleNetDaysChange(Number(e.target.value))}
+                className={`${inputCls} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none text-center`}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Due date</label>
               <input
                 type="date"
                 value={form.due_date}
-                onChange={e => patch({ due_date: e.target.value })}
+                onChange={e => handleDueDateChange(e.target.value)}
                 className={inputCls}
               />
             </div>
