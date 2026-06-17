@@ -171,12 +171,14 @@ export function SowTermsModal({ sow: initialSow, allDocs, itemId, onSaved, onClo
 
           {/* Payment terms */}
           <div>
-            <label className={labelCls}>Payment terms</label>
+            <label className={labelCls}>Payment terms (days)</label>
             <input
+              type="number"
+              min={0}
               value={fields.parsed_payment_terms}
               onChange={e => patch({ parsed_payment_terms: e.target.value })}
-              placeholder="e.g. Net 30, Net 30 (invoiced on milestone completion)"
-              className={inputCls}
+              placeholder="30"
+              className={`${inputCls} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
             />
           </div>
 
