@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Pod, RevenueRow, CostRow, PlanStatus } from '@/types/database'
-import { sumByStatus, sumCells, monthLabel, fyLabel } from '@/lib/plan-utils'
-import { StatusBadge } from '@/components/plan/StatusBadge'
+import { sumByStatus, sumCells, monthLabel, fyLabel, cycleStatus } from '@/lib/plan-utils'
 import { AISummary } from '@/components/plan/AISummary'
 
 type Slide =
@@ -26,7 +25,7 @@ interface Props {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function kFmt(v: number) {
-  return `${Math.round(v / 1000).toLocaleString('sv-SE')} kSEK`
+  return Math.round(v / 1000).toLocaleString('sv-SE')
 }
 
 const COLOUR = {
@@ -43,26 +42,33 @@ function marginColour(pct: number | null): keyof typeof COLOUR {
   return 'red'
 }
 
-function KpiCard({ label, value, colour = 'white' }: {
+function KpiChip({ label, value, colour = 'white', big }: {
   label:   string
   value:   string
   colour?: keyof typeof COLOUR
+  big?:    boolean
 }) {
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4">
-      <p className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-2">{label}</p>
-      <p className={`text-2xl font-bold tabular-nums ${COLOUR[colour]}`}>{value}</p>
+    <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-right">
+      <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</p>
+      <p className={`font-bold tabular-nums ${big ? 'text-3xl' : 'text-xl'} ${COLOUR[colour]}`}>{value}</p>
     </div>
   )
 }
 
-// ─── PresCell — editable cell with featured (larger) variant ──────────────────
+// ─── KeyCell — large editable cell for featured months ────────────────────────
 
-function PresCell({ amount, status, featured, isAging, onSaveAmount, onSaveStatus }: {
+const STATUS_STYLES: Record<PlanStatus, { bg: string; dot: string; label: string }> = {
+  A: { bg: 'bg-[#DCFCE7]', dot: 'bg-[#16A34A]', label: 'Actual'   },
+  B: { bg: 'bg-[#DBEAFE]', dot: 'bg-[#2563EB]', label: 'Booked'   },
+  F: { bg: '',             dot: 'bg-[#9CA3AF]', label: 'Forecast'  },
+}
+
+function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatus }: {
   amount:        number
   status:        PlanStatus
-  featured?:     boolean
   isAging?:      boolean
+  isCurrent?:    boolean
   onSaveAmount?: (v: number) => Promise<void>
   onSaveStatus?: (s: PlanStatus) => Promise<void>
 }) {
@@ -80,19 +86,16 @@ function PresCell({ amount, status, featured, isAging, onSaveAmount, onSaveStatu
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
 
-  const STATUS_BG: Record<string, string> = { A: 'bg-[#F0FDF4]', B: 'bg-[#EFF6FF]', F: '' }
-  const cellBg = isAging && amount > 0 && !editing
-    ? 'bg-[#FFFBEB]'
-    : amount > 0 && !editing ? (STATUS_BG[status] ?? '') : ''
+  const st    = isAging && amount > 0 ? 'A' : status  // show aging as green so bg makes sense
+  const style = isAging && amount > 0
+    ? { bg: 'bg-[#FFFBEB]', dot: 'bg-[#D97706]', label: 'Aging' }
+    : STATUS_STYLES[st]
 
-  const heightCls = featured ? 'min-h-[48px]' : 'min-h-[36px]'
-  const amtCls    = featured
-    ? `text-right leading-none min-w-[44px] text-sm font-bold ${amount === 0 ? 'text-[#D1D5DB]' : isAging ? 'text-[#B45309]' : 'text-[#0F0F0F]'}`
-    : `text-right leading-none min-w-[36px] text-xs font-medium ${amount === 0 ? 'text-[#D1D5DB]' : isAging ? 'text-[#B45309]' : 'text-[#0F0F0F]'}`
+  const ring = isCurrent ? 'ring-2 ring-inset ring-[#2563EB]/30' : ''
 
   if (editing) {
     return (
-      <div className={`flex items-center px-1 py-1 ${heightCls}`}>
+      <div className={`${style.bg} ${ring} flex items-center justify-center min-h-[72px] px-3`}>
         <input
           ref={inputRef}
           type="number"
@@ -103,51 +106,78 @@ function PresCell({ amount, status, featured, isAging, onSaveAmount, onSaveStatu
             if (e.key === 'Enter')  { e.preventDefault(); commit() }
             if (e.key === 'Escape') setEditing(false)
           }}
-          className="w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
+          className="w-full text-center text-xl font-bold bg-white/60 border border-[#61b5cc] rounded-lg px-2 py-1 outline-none"
         />
       </div>
     )
   }
 
   return (
-    <div className={`flex items-center justify-end gap-1 px-1 py-1 ${heightCls} ${cellBg} transition-colors`}>
-      <StatusBadge status={status} onCycle={onSaveStatus} isEmpty={amount === 0} />
-      <div
+    <div className={`${style.bg} ${ring} flex flex-col items-center justify-center min-h-[72px] px-2 py-2 group cursor-pointer transition-all hover:brightness-95`}>
+      <span
         onClick={() => { setDraft(amount === 0 ? '' : String(Math.round(amount / 1000))); setEditing(true) }}
-        className={`${amtCls} cursor-text hover:bg-[#F3F4F6] rounded px-0.5 transition-colors`}
+        className={`text-2xl font-bold tabular-nums leading-none ${
+          amount === 0 ? 'text-[#9CA3AF]' : isAging ? 'text-[#B45309]' : 'text-[#0F0F0F]'
+        }`}
       >
         {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
-      </div>
+      </span>
+      <button
+        onClick={() => onSaveStatus?.(cycleStatus(status))}
+        className={`mt-1.5 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#374151]">{style.label}</span>
+      </button>
     </div>
   )
 }
 
 // ─── Slide: Overview ──────────────────────────────────────────────────────────
 
-function OverviewSlide({ allRevenueRows, allCostRows, months }: {
+function OverviewSlide({ allRevenueRows, allCostRows, months, pods }: {
   allRevenueRows: RevenueRow[]
   allCostRows:    CostRow[]
   months:         readonly string[]
+  pods:           Pod[]
 }) {
   const totalRev  = months.reduce((s, m) => s + sumByStatus(allRevenueRows, m, ['A', 'B']), 0)
   const totalCost = months.reduce((s, m) => s + sumCells(allCostRows, m), 0)
   const margin    = totalRev - totalCost
   const marginPct = totalRev > 0 ? Math.round((margin / totalRev) * 100) : null
 
+  const activePods = pods.filter(pod => allRevenueRows.some(r => r.pod_id === pod.id))
+
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-5xl font-bold text-white mb-2">Weekly P&L Review</h1>
-      <p className="text-white/40 mb-10 text-lg">Full fiscal year overview</p>
+      <h1 className="text-5xl font-bold text-white mb-1">Weekly P&L Review</h1>
+      <p className="text-white/40 mb-8 text-base">Full fiscal year overview</p>
 
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <KpiCard label="Revenue (A+B)" value={kFmt(totalRev)} />
-        <KpiCard label="Costs" value={kFmt(totalCost)} />
-        <KpiCard label="Gross margin" value={kFmt(margin)} colour={margin >= 0 ? 'green' : 'red'} />
-        <KpiCard
-          label="Margin %"
-          value={marginPct != null ? `${marginPct}%` : '—'}
-          colour={marginColour(marginPct)}
-        />
+        <KpiChip big label="Revenue (A+B)" value={`${kFmt(totalRev)} kSEK`} />
+        <KpiChip big label="Costs" value={`${kFmt(totalCost)} kSEK`} />
+        <KpiChip big label="Gross margin" value={`${kFmt(margin)} kSEK`} colour={margin >= 0 ? 'green' : 'red'} />
+        <KpiChip big label="Margin %" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
+      </div>
+
+      {/* Per-pod summary */}
+      <div className="grid gap-3 mb-8" style={{ gridTemplateColumns: `repeat(${Math.min(activePods.length, 4)}, 1fr)` }}>
+        {activePods.map(pod => {
+          const rows    = allRevenueRows.filter(r => r.pod_id === pod.id)
+          const costs   = allCostRows.filter(r => r.pod_id === pod.id)
+          const rev     = months.reduce((s, m) => s + sumByStatus(rows, m, ['A', 'B']), 0)
+          const cost    = months.reduce((s, m) => s + sumCells(costs, m), 0)
+          const pct     = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
+          return (
+            <div key={pod.id} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+              <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-2">{pod.name}</p>
+              <p className="text-white font-bold text-lg tabular-nums">{kFmt(rev)} <span className="text-white/40 text-sm">k</span></p>
+              <p className={`text-sm font-semibold mt-0.5 ${pct != null ? COLOUR[marginColour(pct)] : 'text-white/40'}`}>
+                {pct != null ? `${pct}% margin` : '—'}
+              </p>
+            </div>
+          )
+        })}
       </div>
 
       <AISummary allRevenueRows={allRevenueRows} allCostRows={allCostRows} months={months} />
@@ -155,13 +185,13 @@ function OverviewSlide({ allRevenueRows, allCostRows, months }: {
   )
 }
 
-// ─── Slide: Pod (all revenue lines) ──────────────────────────────────────────
+// ─── Slide: Pod ───────────────────────────────────────────────────────────────
 
 function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStatus }: {
-  pod:         Pod
-  revenueRows: RevenueRow[]
-  costRows:    CostRow[]
-  months:      readonly string[]
+  pod:          Pod
+  revenueRows:  RevenueRow[]
+  costRows:     CostRow[]
+  months:       readonly string[]
   onSaveAmount: (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveStatus: (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
 }) {
@@ -169,146 +199,160 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
   const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   const curIdx   = months.indexOf(curMonth)
 
-  // prev, current, next 2 — clamped to valid range
-  const keySet = new Set(
-    [-1, 0, 1, 2]
-      .map(offset => curIdx + offset)
-      .filter(i => i >= 0 && i < months.length)
-      .map(i => months[i])
-  )
+  // The 4 featured months: prev, current, next 2 — clamped to the fiscal year
+  const featuredMonths = [-1, 0, 1, 2]
+    .map(offset => curIdx + offset)
+    .filter(i => i >= 0 && i < months.length)
+    .map(i => months[i])
+
+  const ytdMonths = months.filter(m => m <= curMonth)
 
   const totalRev  = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
   const totalCost = months.reduce((s, m) => s + sumCells(costRows, m), 0)
   const margin    = totalRev - totalCost
   const marginPct = totalRev > 0 ? Math.round((margin / totalRev) * 100) : null
 
+  const MONTH_FMT = new Intl.DateTimeFormat('en-SE', { month: 'short', year: '2-digit' })
+  function mLabel(iso: string) {
+    return MONTH_FMT.format(new Date(iso + 'T12:00:00'))
+  }
+
   return (
-    <div className="max-w-none mx-auto">
-      {/* Pod header + KPIs */}
+    <div>
+      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-1">Pod</p>
           <h1 className="text-4xl font-bold text-white">{pod.name}</h1>
-          <p className="text-white/40 text-sm mt-1">{revenueRows.length} client{revenueRows.length !== 1 ? 's' : ''}</p>
+          <p className="text-white/40 text-sm mt-1">
+            {revenueRows.length} client{revenueRows.length !== 1 ? 's' : ''}
+            {' · '}
+            Showing {featuredMonths.map(m => monthLabel(m)).join(' · ')}
+          </p>
         </div>
-        <div className="flex gap-3">
-          <KpiCard label="Revenue A+B" value={kFmt(totalRev)} />
-          <KpiCard label="Costs" value={kFmt(totalCost)} />
-          <KpiCard
-            label="Margin %"
-            value={marginPct != null ? `${marginPct}%` : '—'}
-            colour={marginColour(marginPct)}
-          />
+        <div className="flex gap-3 shrink-0">
+          <KpiChip label="Revenue A+B" value={`${kFmt(totalRev)} k`} />
+          <KpiChip label="Costs" value={`${kFmt(totalCost)} k`} />
+          <KpiChip label="Margin %" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
         </div>
       </div>
 
-      {/* Revenue table */}
       {revenueRows.length === 0 ? (
-        <p className="text-white/30 text-sm">No clients in this pod.</p>
+        <p className="text-white/30">No clients in this pod.</p>
       ) : (
         <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  {/* Client name header */}
-                  <th className="sticky left-0 z-10 bg-[#F9F9F8] px-4 py-2.5 text-left text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider border-b border-r border-[#EBEBEB] min-w-[160px]">
-                    Client
-                  </th>
-                  {/* Month headers */}
-                  {months.map(m => {
-                    const featured = keySet.has(m)
-                    return (
-                      <th
-                        key={m}
-                        className={`py-2.5 text-center border-b border-[#EBEBEB] ${
-                          featured
-                            ? 'bg-[#EFF6FF] text-[10px] font-bold text-[#1D4ED8] uppercase tracking-wider min-w-[76px]'
-                            : 'bg-[#F9F9F8] text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider min-w-[60px]'
-                        }`}
-                      >
-                        {monthLabel(m)}
-                        {m === curMonth && (
-                          <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-[#1D4ED8] align-middle" />
-                        )}
-                      </th>
-                    )
-                  })}
-                  {/* FY total header */}
-                  <th className="bg-[#F9F9F8] px-3 py-2.5 text-right text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider border-b border-l border-[#EBEBEB] min-w-[72px]">
-                    FY Total
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {revenueRows.map((row, ri) => {
-                  const fyTotal = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                {/* Client col */}
+                <th className="bg-[#F9F9F8] px-5 py-3 text-left border-b border-r border-[#E5E7EB] min-w-[200px]">
+                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Client</span>
+                </th>
+                {/* Featured month headers */}
+                {featuredMonths.map(m => {
+                  const isCur = m === curMonth
                   return (
-                    <tr key={row.id} className={ri % 2 === 1 ? 'bg-[#FAFAFA]' : ''}>
-                      {/* Client name */}
-                      <td className={`sticky left-0 z-10 px-4 py-0 border-b border-r border-[#EBEBEB] ${ri % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}`}>
-                        <div className="py-2">
-                          <p className="text-sm font-medium text-[#0F0F0F] leading-tight">{row.client_name ?? '—'}</p>
-                          {row.project && <p className="text-[10px] text-[#9CA3AF] mt-0.5">{row.project}</p>}
-                        </div>
-                      </td>
-                      {/* Month cells */}
-                      {months.map(m => {
-                        const cell     = row.cells[m] ?? { amount: 0, status: 'F' as PlanStatus }
-                        const featured = keySet.has(m)
-                        const isAging  = m < curMonth && cell.status !== 'A'
-                        return (
-                          <td
-                            key={m}
-                            className={`border-b border-r border-[#F3F4F6] last:border-r-0 ${featured ? 'border-x-[#DBEAFE]' : ''}`}
-                          >
-                            <PresCell
-                              amount={cell.amount}
-                              status={cell.status}
-                              featured={featured}
-                              isAging={isAging}
-                              onSaveAmount={v => onSaveAmount(row.id, m, cell.status, v)}
-                              onSaveStatus={s => onSaveStatus(row.id, m, cell.amount, s)}
-                            />
-                          </td>
-                        )
-                      })}
-                      {/* FY total */}
-                      <td className="border-b border-l border-[#EBEBEB] px-3 py-0 text-right">
-                        <span className="text-xs font-bold text-[#374151] tabular-nums">
-                          {fyTotal === 0 ? '—' : Math.round(fyTotal / 1000).toLocaleString('sv-SE')}
+                    <th
+                      key={m}
+                      className={`py-3 px-2 text-center border-b border-r border-[#E5E7EB] min-w-[120px] ${
+                        isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        {isCur && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] mb-0.5" />}
+                        <span className={`text-xs font-bold uppercase tracking-wider ${isCur ? 'text-[#1D4ED8]' : 'text-[#6B7280]'}`}>
+                          {mLabel(m)}
                         </span>
-                      </td>
-                    </tr>
+                      </div>
+                    </th>
                   )
                 })}
+                {/* YTD col */}
+                <th className="bg-[#F9F9F8] px-4 py-3 text-right border-b border-r border-[#E5E7EB] min-w-[96px]">
+                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">YTD A+B</span>
+                </th>
+                {/* FY total col */}
+                <th className="bg-[#F9F9F8] px-4 py-3 text-right border-b border-[#E5E7EB] min-w-[96px]">
+                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">FY Total</span>
+                </th>
+              </tr>
+            </thead>
 
-                {/* Revenue totals row */}
-                <tr className="border-t-2 border-[#E5E7EB] bg-[#F9F9F8]">
-                  <td className="sticky left-0 z-10 bg-[#F9F9F8] px-4 py-2 border-r border-[#EBEBEB]">
-                    <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Total revenue</span>
-                  </td>
-                  {months.map(m => {
-                    const tot      = sumByStatus(revenueRows, m, ['A', 'B', 'F'])
-                    const featured = keySet.has(m)
-                    return (
-                      <td key={m} className="px-1 py-2 text-right border-r border-[#F3F4F6]">
-                        <span className={`tabular-nums ${featured ? 'text-sm font-bold text-[#374151]' : 'text-xs font-medium text-[#6B7280]'}`}>
-                          {tot === 0 ? '—' : Math.round(tot / 1000).toLocaleString('sv-SE')}
-                        </span>
-                      </td>
-                    )
-                  })}
-                  <td className="border-l border-[#EBEBEB] px-3 py-2 text-right">
-                    <span className="text-xs font-bold text-[#374151] tabular-nums">
-                      {Math.round(months.reduce((s, m) => s + sumCells(revenueRows, m), 0) / 1000).toLocaleString('sv-SE')}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+            <tbody>
+              {revenueRows.map((row, ri) => {
+                const ytdRev = ytdMonths.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
+                const fyAll  = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
+                const isEven = ri % 2 === 0
+
+                return (
+                  <tr key={row.id}>
+                    {/* Client name */}
+                    <td className={`px-5 py-3 border-b border-r border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
+                      <p className="text-base font-semibold text-[#0F0F0F] leading-tight">{row.client_name ?? '—'}</p>
+                      {row.project && <p className="text-xs text-[#9CA3AF] mt-0.5">{row.project}</p>}
+                    </td>
+                    {/* Featured month cells */}
+                    {featuredMonths.map(m => {
+                      const cell    = row.cells[m] ?? { amount: 0, status: 'F' as PlanStatus }
+                      const isAging = m < curMonth && cell.status !== 'A'
+                      return (
+                        <td key={m} className="border-b border-r border-[#E5E7EB] p-0">
+                          <KeyCell
+                            amount={cell.amount}
+                            status={cell.status}
+                            isAging={isAging}
+                            isCurrent={m === curMonth}
+                            onSaveAmount={v => onSaveAmount(row.id, m, cell.status, v)}
+                            onSaveStatus={s => onSaveStatus(row.id, m, cell.amount, s)}
+                          />
+                        </td>
+                      )
+                    })}
+                    {/* YTD */}
+                    <td className={`px-4 py-3 text-right border-b border-r border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
+                      <span className="text-base font-semibold text-[#374151] tabular-nums">
+                        {ytdRev === 0 ? '—' : kFmt(ytdRev)}
+                      </span>
+                    </td>
+                    {/* FY total */}
+                    <td className={`px-4 py-3 text-right border-b border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
+                      <span className="text-base font-semibold text-[#374151] tabular-nums">
+                        {fyAll === 0 ? '—' : kFmt(fyAll)}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+
+              {/* Totals row */}
+              <tr>
+                <td className="px-5 py-3 border-t-2 border-[#E5E7EB] bg-[#F9F9F8] border-r border-b-0">
+                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Total</span>
+                </td>
+                {featuredMonths.map(m => {
+                  const tot    = sumCells(revenueRows, m)
+                  const isCur  = m === curMonth
+                  return (
+                    <td key={m} className={`border-t-2 border-r border-[#E5E7EB] border-b-0 px-2 py-3 text-center ${isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'}`}>
+                      <span className={`text-base font-bold tabular-nums ${isCur ? 'text-[#1D4ED8]' : 'text-[#374151]'}`}>
+                        {tot === 0 ? '—' : kFmt(tot)}
+                      </span>
+                    </td>
+                  )
+                })}
+                <td className="border-t-2 border-r border-[#E5E7EB] border-b-0 bg-[#F9F9F8] px-4 py-3 text-right">
+                  <span className="text-base font-bold text-[#374151] tabular-nums">
+                    {kFmt(ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0))}
+                  </span>
+                </td>
+                <td className="border-t-2 border-[#E5E7EB] border-b-0 bg-[#F9F9F8] px-4 py-3 text-right">
+                  <span className="text-base font-bold text-[#374151] tabular-nums">
+                    {kFmt(months.reduce((s, m) => s + sumCells(revenueRows, m), 0))}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -349,7 +393,7 @@ export function PresentationMode({
   if (!slide) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#0F0F0F] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-[#111827] flex flex-col">
 
       {/* Top bar */}
       <div className="flex items-center justify-between px-8 py-3 border-b border-white/10 shrink-0">
@@ -364,12 +408,13 @@ export function PresentationMode({
       </div>
 
       {/* Slide content */}
-      <div className="flex-1 overflow-auto px-10 py-8">
+      <div className="flex-1 overflow-auto px-12 py-8">
         {slide.kind === 'overview' && (
           <OverviewSlide
             allRevenueRows={allRevenueRows}
             allCostRows={allCostRows}
             months={months}
+            pods={pods}
           />
         )}
         {slide.kind === 'pod' && (
@@ -385,7 +430,7 @@ export function PresentationMode({
       </div>
 
       {/* Navigation bar */}
-      <div className="flex items-center justify-between px-10 py-4 border-t border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-12 py-4 border-t border-white/10 shrink-0">
         <button
           onClick={() => onSlideChange(Math.max(currentSlide - 1, 0))}
           disabled={currentSlide === 0}
@@ -394,15 +439,15 @@ export function PresentationMode({
           ← Prev
         </button>
 
-        <div className="flex gap-2 flex-wrap justify-center max-w-[60vw]">
+        <div className="flex gap-2">
           {slides.map((s, i) => (
             <button
               key={i}
               onClick={() => onSlideChange(i)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-colors ${
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 i === safeIdx
-                  ? 'bg-white text-[#0F0F0F] font-semibold'
-                  : 'text-white/40 hover:text-white/70 hover:bg-white/10'
+                  ? 'bg-white text-[#111827]'
+                  : 'text-white/40 hover:text-white/80 hover:bg-white/10'
               }`}
             >
               {s.kind === 'overview' ? 'Overview' : s.pod.name}
