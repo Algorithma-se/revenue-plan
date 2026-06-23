@@ -18,6 +18,7 @@ import { SummarySection } from '@/components/plan/SummarySection'
 import { AISummary } from '@/components/plan/AISummary'
 import { PlanChart } from '@/components/plan/PlanChart'
 import { RevenueDonut } from '@/components/plan/RevenueDonut'
+import { PresentationMode } from '@/components/plan/PresentationMode'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
@@ -35,8 +36,10 @@ interface PlanState {
 export default function PlanPage() {
   const [state, setState]     = useState<PlanState | null>(null)
   const [loading, setLoading] = useState(true)
-  const [fyStart, setFyStart] = useState(currentFyStart)
-  const didInitialSort        = useRef(false)
+  const [fyStart, setFyStart]           = useState(currentFyStart)
+  const [presentMode, setPresentMode]   = useState(false)
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const didInitialSort                  = useRef(false)
 
   const months = getFiscalMonths(fyStart)
 
@@ -386,6 +389,15 @@ export default function PlanPage() {
                 <path fillRule="evenodd" d="M6.293 3.293a1 1 0 000 1.414L9.586 8l-3.293 3.293a1 1 0 001.414 1.414l4-4a1 1 0 000-1.414l-4-4a1 1 0 00-1.414 0z" clipRule="evenodd" />
               </svg>
             </button>
+            <button
+              onClick={() => { setCurrentSlide(0); setPresentMode(true) }}
+              className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-white border border-transparent hover:border-[#EBEBEB] transition-all ml-1"
+              title="Presentation mode"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v7a1 1 0 01-1 1H9v1h2a.5.5 0 010 1H5a.5.5 0 010-1h2v-1H2a1 1 0 01-1-1V3zm13 0H2v7h12V3z" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -568,6 +580,21 @@ export default function PlanPage() {
         </div>
 
       </div>
+
+      {presentMode && (
+        <PresentationMode
+          pods={state.pods}
+          allRevenueRows={allRevenueRows}
+          allCostRows={allCostRows}
+          months={months}
+          fyStart={fyStart}
+          currentSlide={currentSlide}
+          onSlideChange={setCurrentSlide}
+          onClose={() => setPresentMode(false)}
+          onSaveManualCellAmount={saveManualCellAmount}
+          onSaveManualCellStatus={saveManualCellStatus}
+        />
+      )}
     </div>
   )
 }
