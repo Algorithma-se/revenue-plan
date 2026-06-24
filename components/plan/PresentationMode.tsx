@@ -42,9 +42,10 @@ function marginColour(pct: number | null): keyof typeof COLOUR {
   return 'red'
 }
 
-function KpiChip({ label, value, colour = 'white', big }: {
+function KpiChip({ label, value, sub, colour = 'white', big }: {
   label:   string
   value:   string
+  sub?:    string
   colour?: keyof typeof COLOUR
   big?:    boolean
 }) {
@@ -52,6 +53,7 @@ function KpiChip({ label, value, colour = 'white', big }: {
     <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-right">
       <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</p>
       <p className={`font-bold tabular-nums ${big ? 'text-3xl' : 'text-xl'} ${COLOUR[colour]}`}>{value}</p>
+      {sub && <p className="text-white/30 text-xs tabular-nums mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -207,10 +209,11 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
 
   const ytdMonths = months.filter(m => m <= curMonth)
 
-  const totalRev  = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
-  const totalCost = months.reduce((s, m) => s + sumCells(costRows, m), 0)
-  const margin    = totalRev - totalCost
-  const marginPct = totalRev > 0 ? Math.round((margin / totalRev) * 100) : null
+  const totalRevAB = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
+  const totalRevFC = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B', 'F']), 0)
+  const totalCost  = months.reduce((s, m) => s + sumCells(costRows, m), 0)
+  const margin     = totalRevAB - totalCost
+  const marginPct  = totalRevAB > 0 ? Math.round((margin / totalRevAB) * 100) : null
 
   const MONTH_FMT = new Intl.DateTimeFormat('en-SE', { month: 'short', year: '2-digit' })
   function mLabel(iso: string) {
@@ -231,9 +234,13 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
           </p>
         </div>
         <div className="flex gap-3 shrink-0">
-          <KpiChip label="Revenue A+B" value={`${kFmt(totalRev)} k`} />
+          <KpiChip
+            label="Revenue A+B"
+            value={`${kFmt(totalRevAB)} k`}
+            sub={totalRevFC > totalRevAB ? `(FC: ${kFmt(totalRevFC)} k)` : undefined}
+          />
           <KpiChip label="Costs" value={`${kFmt(totalCost)} k`} />
-          <KpiChip label="Margin %" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
+          <KpiChip label="CB1%" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
         </div>
       </div>
 
@@ -280,9 +287,10 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
 
             <tbody>
               {revenueRows.map((row, ri) => {
-                const ytdRev = ytdMonths.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
-                const fyAll  = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
-                const isEven = ri % 2 === 0
+                const ytdRev  = ytdMonths.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
+                const fyAB    = months.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
+                const fyFC    = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
+                const isEven  = ri % 2 === 0
 
                 return (
                   <tr key={row.id}>
@@ -317,8 +325,11 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                     {/* FY total */}
                     <td className={`px-4 py-3 text-right border-b border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
                       <span className="text-base font-semibold text-[#374151] tabular-nums">
-                        {fyAll === 0 ? '—' : kFmt(fyAll)}
+                        {fyAB === 0 ? '—' : kFmt(fyAB)}
                       </span>
+                      {fyFC > fyAB && (
+                        <span className="block text-xs text-[#9CA3AF] tabular-nums">({kFmt(fyFC)} FC)</span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -330,13 +341,19 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Total</span>
                 </td>
                 {featuredMonths.map(m => {
-                  const tot    = sumCells(revenueRows, m)
-                  const isCur  = m === curMonth
+                  const totAB = sumByStatus(revenueRows, m, ['A', 'B'])
+                  const totFC = sumByStatus(revenueRows, m, ['F'])
+                  const isCur = m === curMonth
                   return (
                     <td key={m} className={`border-t-2 border-r border-[#E5E7EB] border-b-0 px-2 py-3 text-center ${isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'}`}>
                       <span className={`text-base font-bold tabular-nums ${isCur ? 'text-[#1D4ED8]' : 'text-[#374151]'}`}>
-                        {tot === 0 ? '—' : kFmt(tot)}
+                        {totAB === 0 ? '—' : kFmt(totAB)}
                       </span>
+                      {totFC > 0 && (
+                        <span className={`block text-xs tabular-nums ${isCur ? 'text-[#93C5FD]' : 'text-[#9CA3AF]'}`}>
+                          ({kFmt(totFC)} FC)
+                        </span>
+                      )}
                     </td>
                   )
                 })}
@@ -346,9 +363,18 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   </span>
                 </td>
                 <td className="border-t-2 border-[#E5E7EB] border-b-0 bg-[#F9F9F8] px-4 py-3 text-right">
-                  <span className="text-base font-bold text-[#374151] tabular-nums">
-                    {kFmt(months.reduce((s, m) => s + sumCells(revenueRows, m), 0))}
-                  </span>
+                  {(() => {
+                    const fyTotAB = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
+                    const fyTotFC = months.reduce((s, m) => s + sumCells(revenueRows, m), 0)
+                    return (
+                      <>
+                        <span className="text-base font-bold text-[#374151] tabular-nums">{kFmt(fyTotAB)}</span>
+                        {fyTotFC > fyTotAB && (
+                          <span className="block text-xs text-[#9CA3AF] tabular-nums">({kFmt(fyTotFC)} FC)</span>
+                        )}
+                      </>
+                    )
+                  })()}
                 </td>
               </tr>
             </tbody>
