@@ -120,13 +120,14 @@ export async function approveBLInvoice(invoiceId: string): Promise<{ error?: str
   // Step 1: fetch OAuth token
   let token: string
   try {
-    const tokenRes = await fetch(authUrl, {
+    const tokenRes = await fetch(`${authUrl}/token`, {
       method:  'POST',
-      headers: {
-        'Content-Type':  'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${process.env.LUNDIFY_CLIENT_ID}:${process.env.LUNDIFY_CLIENT_SECRET}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({ grant_type: 'client_credentials' }).toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'client_credentials',
+        client_id:     process.env.LUNDIFY_CLIENT_ID!,
+        client_secret: process.env.LUNDIFY_CLIENT_SECRET!,
+      }).toString(),
     })
     if (!tokenRes.ok) {
       const text = await tokenRes.text()
@@ -143,7 +144,7 @@ export async function approveBLInvoice(invoiceId: string): Promise<{ error?: str
     'Authorization': `Bearer ${token}`,
     'Content-Type':  'application/json',
   }
-  if (process.env.LUNDIFY_USER_KEY) apiHeaders['X-User-Key'] = process.env.LUNDIFY_USER_KEY
+  if (process.env.LUNDIFY_USER_KEY) apiHeaders['User-Key'] = process.env.LUNDIFY_USER_KEY
 
   // Step 2: look up customer by name to get customer number (best effort)
   let customerNumber: string | null = null

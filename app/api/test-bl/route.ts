@@ -34,13 +34,14 @@ export async function GET() {
   // ── Step 2: OAuth token ──────────────────────────────────────────────────
   let token: string | null = null
   try {
-    const res = await fetch(authUrl, {
+    const res = await fetch(`${authUrl}/token`, {
       method:  'POST',
-      headers: {
-        'Content-Type':  'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({ grant_type: 'client_credentials' }).toString(),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'client_credentials',
+        client_id:     clientId,
+        client_secret: clientSecret,
+      }).toString(),
     })
     const body = await res.text()
     if (!res.ok) {
@@ -61,7 +62,7 @@ export async function GET() {
   if (!token) return NextResponse.json({ steps: results, passed: false })
 
   const apiHeaders: Record<string, string> = { 'Authorization': `Bearer ${token}` }
-  if (userKey) apiHeaders['X-User-Key'] = userKey
+  if (userKey) apiHeaders['User-Key'] = userKey
   const api = baseUrl.replace(/\/$/, '')
 
   // ── Step 3: customer list ping ───────────────────────────────────────────
