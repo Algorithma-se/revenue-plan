@@ -240,7 +240,6 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
             sub={totalRevFC > totalRevAB ? `(FC: ${kFmt(totalRevFC)} k)` : undefined}
           />
           <KpiChip label="Costs" value={`${kFmt(totalCost)} k`} />
-          <KpiChip label="CB1%" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
         </div>
       </div>
 
@@ -375,6 +374,60 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                       </>
                     )
                   })()}
+                </td>
+              </tr>
+
+              {/* CB1% row */}
+              <tr>
+                <td className="px-5 py-2.5 bg-[#F9F9F8] border-r border-[#E5E7EB]">
+                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">CB1%</span>
+                </td>
+                {featuredMonths.map(m => {
+                  const rev  = sumByStatus(revenueRows, m, ['A', 'B'])
+                  const cost = sumCells(costRows, m)
+                  const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
+                  const isCur = m === curMonth
+                  return (
+                    <td key={m} className={`px-2 py-2.5 text-center border-r border-[#E5E7EB] ${isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'}`}>
+                      <span className={`text-sm font-bold tabular-nums ${
+                        pct == null ? 'text-[#9CA3AF]'
+                        : pct >= 20  ? 'text-[#16A34A]'
+                        : pct >= 0   ? 'text-[#D97706]'
+                        : 'text-[#DC2626]'
+                      }`}>
+                        {pct == null ? '—' : `${pct}%`}
+                      </span>
+                    </td>
+                  )
+                })}
+                {/* YTD CB1% */}
+                <td className="px-4 py-2.5 text-right bg-[#F9F9F8] border-r border-[#E5E7EB]">
+                  {(() => {
+                    const rev  = ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
+                    const cost = ytdMonths.reduce((s, m) => s + sumCells(costRows, m), 0)
+                    const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
+                    return (
+                      <span className={`text-sm font-bold tabular-nums ${
+                        pct == null ? 'text-[#9CA3AF]'
+                        : pct >= 20  ? 'text-[#16A34A]'
+                        : pct >= 0   ? 'text-[#D97706]'
+                        : 'text-[#DC2626]'
+                      }`}>
+                        {pct == null ? '—' : `${pct}%`}
+                      </span>
+                    )
+                  })()}
+                </td>
+                {/* FY CB1% */}
+                <td className="px-4 py-2.5 text-right bg-[#F9F9F8]">
+                  <span className={`text-sm font-bold tabular-nums ${
+                    marginPct == null ? 'text-[#9CA3AF]'
+                    : marginPct >= 20  ? 'text-[#16A34A]'
+                    : marginPct >= 0   ? 'text-[#D97706]'
+                    : 'text-[#DC2626]'
+                  }`}>
+                    {marginPct == null ? '—' : `${marginPct}%`}
+                  </span>
                 </td>
               </tr>
             </tbody>
