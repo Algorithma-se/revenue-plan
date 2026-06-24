@@ -60,12 +60,6 @@ function KpiChip({ label, value, sub, colour = 'white', big }: {
 
 // ─── KeyCell — large editable cell for featured months ────────────────────────
 
-const STATUS_STYLES: Record<PlanStatus, { bg: string; dot: string; label: string }> = {
-  A: { bg: 'bg-[#DCFCE7]', dot: 'bg-[#16A34A]', label: 'Actual'   },
-  B: { bg: 'bg-[#DBEAFE]', dot: 'bg-[#2563EB]', label: 'Booked'   },
-  F: { bg: '',             dot: 'bg-[#9CA3AF]', label: 'Forecast'  },
-}
-
 function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatus }: {
   amount:        number
   status:        PlanStatus
@@ -88,16 +82,23 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
 
-  const st    = isAging && amount > 0 ? 'A' : status  // show aging as green so bg makes sense
-  const style = isAging && amount > 0
-    ? { bg: 'bg-[#FFFBEB]', dot: 'bg-[#D97706]', label: 'Aging' }
-    : STATUS_STYLES[st]
+  let textCls: string
+  let dotCls:  string
+  let label:   string
 
-  const ring = isCurrent ? 'ring-2 ring-inset ring-[#2563EB]/30' : ''
+  if (isAging && amount > 0) {
+    textCls = 'text-[#FCD34D]'; dotCls = 'bg-[#FCD34D]'; label = 'Aging'
+  } else if (status === 'A') {
+    textCls = amount === 0 ? 'text-white/20' : 'text-[#4ADE80]'; dotCls = 'bg-[#4ADE80]'; label = 'Actual'
+  } else if (status === 'B') {
+    textCls = amount === 0 ? 'text-white/20' : 'text-white'; dotCls = 'bg-[#60A5FA]'; label = 'Booked'
+  } else {
+    textCls = 'text-white/25'; dotCls = 'bg-white/25'; label = 'Forecast'
+  }
 
   if (editing) {
     return (
-      <div className={`${style.bg} ${ring} flex items-center justify-center min-h-[72px] px-3`}>
+      <div className="flex items-center justify-center py-5 px-3">
         <input
           ref={inputRef}
           type="number"
@@ -108,28 +109,26 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
             if (e.key === 'Enter')  { e.preventDefault(); commit() }
             if (e.key === 'Escape') setEditing(false)
           }}
-          className="w-full text-center text-xl font-bold bg-white/60 border border-[#61b5cc] rounded-lg px-2 py-1 outline-none"
+          className="w-full text-center text-xl font-bold bg-white/10 border border-[#60A5FA]/50 rounded-lg px-2 py-1 outline-none text-white"
         />
       </div>
     )
   }
 
   return (
-    <div className={`${style.bg} ${ring} flex flex-col items-center justify-center min-h-[72px] px-2 py-2 group cursor-pointer transition-all hover:brightness-95`}>
+    <div className="flex flex-col items-center justify-center py-5 px-2 group cursor-pointer">
       <span
         onClick={() => { setDraft(amount === 0 ? '' : String(Math.round(amount / 1000))); setEditing(true) }}
-        className={`text-2xl font-bold tabular-nums leading-none ${
-          amount === 0 ? 'text-[#9CA3AF]' : isAging ? 'text-[#B45309]' : 'text-[#0F0F0F]'
-        }`}
+        className={`text-2xl font-bold tabular-nums leading-none ${textCls}`}
       >
         {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
       </span>
       <button
         onClick={() => onSaveStatus?.(cycleStatus(status))}
-        className={`mt-1.5 flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity`}
+        className="mt-2 flex items-center gap-1 opacity-30 group-hover:opacity-70 transition-opacity"
       >
-        <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#374151]">{style.label}</span>
+        <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">{label}</span>
       </button>
     </div>
   )
@@ -246,13 +245,13 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
       {revenueRows.length === 0 ? (
         <p className="text-white/30">No clients in this pod.</p>
       ) : (
-        <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+        <div className="rounded-2xl overflow-hidden border border-white/[0.12]">
           <table className="w-full border-collapse">
             <thead>
               <tr>
                 {/* Client col */}
-                <th className="bg-[#F9F9F8] px-5 py-3 text-left border-b border-r border-[#E5E7EB] min-w-[200px]">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Client</span>
+                <th className="bg-white/[0.04] px-5 py-3 text-left border-b border-r border-white/[0.08] min-w-[200px]">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Client</span>
                 </th>
                 {/* Featured month headers */}
                 {featuredMonths.map(m => {
@@ -260,13 +259,13 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   return (
                     <th
                       key={m}
-                      className={`py-3 px-2 text-center border-b border-r border-[#E5E7EB] min-w-[120px] ${
-                        isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'
+                      className={`py-3 px-2 text-center border-b border-r border-white/[0.08] min-w-[120px] ${
+                        isCur ? 'bg-[#1D3A5F]/60' : 'bg-white/[0.04]'
                       }`}
                     >
                       <div className="flex flex-col items-center gap-0.5">
-                        {isCur && <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] mb-0.5" />}
-                        <span className={`text-xs font-bold uppercase tracking-wider ${isCur ? 'text-[#1D4ED8]' : 'text-[#6B7280]'}`}>
+                        {isCur && <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA] mb-0.5" />}
+                        <span className={`text-xs font-bold uppercase tracking-wider ${isCur ? 'text-[#93C5FD]' : 'text-white/40'}`}>
                           {mLabel(m)}
                         </span>
                       </div>
@@ -274,12 +273,12 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   )
                 })}
                 {/* YTD col */}
-                <th className="bg-[#F9F9F8] px-4 py-3 text-right border-b border-r border-[#E5E7EB] min-w-[96px]">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">YTD A+B</span>
+                <th className="bg-white/[0.04] px-4 py-3 text-right border-b border-r border-white/[0.08] min-w-[96px]">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">YTD A+B</span>
                 </th>
                 {/* FY total col */}
-                <th className="bg-[#F9F9F8] px-4 py-3 text-right border-b border-[#E5E7EB] min-w-[96px]">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">FY Total</span>
+                <th className="bg-white/[0.04] px-4 py-3 text-right border-b border-white/[0.08] min-w-[96px]">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">FY Total</span>
                 </th>
               </tr>
             </thead>
@@ -292,18 +291,18 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                 const isEven  = ri % 2 === 0
 
                 return (
-                  <tr key={row.id}>
+                  <tr key={row.id} className={`border-b border-white/[0.06] transition-colors hover:bg-white/[0.03] ${!isEven ? 'bg-white/[0.02]' : ''}`}>
                     {/* Client name */}
-                    <td className={`px-5 py-3 border-b border-r border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
-                      <p className="text-base font-semibold text-[#0F0F0F] leading-tight">{row.client_name ?? '—'}</p>
-                      {row.project && <p className="text-xs text-[#9CA3AF] mt-0.5">{row.project}</p>}
+                    <td className="px-5 py-3 border-r border-white/[0.08]">
+                      <p className="text-base font-semibold text-white leading-tight">{row.client_name ?? '—'}</p>
+                      {row.project && <p className="text-xs text-white/35 mt-0.5">{row.project}</p>}
                     </td>
                     {/* Featured month cells */}
                     {featuredMonths.map(m => {
                       const cell    = row.cells[m] ?? { amount: 0, status: 'F' as PlanStatus }
                       const isAging = m < curMonth && cell.status !== 'A'
                       return (
-                        <td key={m} className="border-b border-r border-[#E5E7EB] p-0">
+                        <td key={m} className={`border-r border-white/[0.08] p-0 ${m === curMonth ? 'bg-[#1D3A5F]/20' : ''}`}>
                           <KeyCell
                             amount={cell.amount}
                             status={cell.status}
@@ -316,18 +315,18 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                       )
                     })}
                     {/* YTD */}
-                    <td className={`px-4 py-3 text-right border-b border-r border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
-                      <span className="text-base font-semibold text-[#374151] tabular-nums">
+                    <td className="px-4 py-3 text-right border-r border-white/[0.08]">
+                      <span className="text-base font-semibold text-white/50 tabular-nums">
                         {ytdRev === 0 ? '—' : kFmt(ytdRev)}
                       </span>
                     </td>
                     {/* FY total */}
-                    <td className={`px-4 py-3 text-right border-b border-[#E5E7EB] ${isEven ? 'bg-white' : 'bg-[#FAFAFA]'}`}>
-                      <span className="text-base font-semibold text-[#374151] tabular-nums">
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-base font-semibold text-white/50 tabular-nums">
                         {fyAB === 0 ? '—' : kFmt(fyAB)}
                       </span>
                       {fyFC > fyAB && (
-                        <span className="block text-xs text-[#9CA3AF] tabular-nums">({kFmt(fyFC)} FC)</span>
+                        <span className="block text-xs text-white/25 tabular-nums">({kFmt(fyFC)} FC)</span>
                       )}
                     </td>
                   </tr>
@@ -335,41 +334,41 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
               })}
 
               {/* Totals row */}
-              <tr>
-                <td className="px-5 py-3 border-t-2 border-[#E5E7EB] bg-[#F9F9F8] border-r border-b-0">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">Total</span>
+              <tr className="border-t border-white/20">
+                <td className="px-5 py-3 bg-white/[0.06] border-r border-white/[0.08]">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Total</span>
                 </td>
                 {featuredMonths.map(m => {
                   const totAB = sumByStatus(revenueRows, m, ['A', 'B'])
                   const totFC = sumByStatus(revenueRows, m, ['F'])
                   const isCur = m === curMonth
                   return (
-                    <td key={m} className={`border-t-2 border-r border-[#E5E7EB] border-b-0 px-2 py-3 text-center ${isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'}`}>
-                      <span className={`text-base font-bold tabular-nums ${isCur ? 'text-[#1D4ED8]' : 'text-[#374151]'}`}>
+                    <td key={m} className={`border-r border-white/[0.08] px-2 py-3 text-center ${isCur ? 'bg-[#1D3A5F]/50' : 'bg-white/[0.06]'}`}>
+                      <span className={`text-base font-bold tabular-nums ${isCur ? 'text-[#93C5FD]' : 'text-white'}`}>
                         {totAB === 0 ? '—' : kFmt(totAB)}
                       </span>
                       {totFC > 0 && (
-                        <span className={`block text-xs tabular-nums ${isCur ? 'text-[#93C5FD]' : 'text-[#9CA3AF]'}`}>
+                        <span className={`block text-xs tabular-nums ${isCur ? 'text-[#60A5FA]/50' : 'text-white/25'}`}>
                           ({kFmt(totFC)} FC)
                         </span>
                       )}
                     </td>
                   )
                 })}
-                <td className="border-t-2 border-r border-[#E5E7EB] border-b-0 bg-[#F9F9F8] px-4 py-3 text-right">
-                  <span className="text-base font-bold text-[#374151] tabular-nums">
+                <td className="border-r border-white/[0.08] bg-white/[0.06] px-4 py-3 text-right">
+                  <span className="text-base font-bold text-white tabular-nums">
                     {kFmt(ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0))}
                   </span>
                 </td>
-                <td className="border-t-2 border-[#E5E7EB] border-b-0 bg-[#F9F9F8] px-4 py-3 text-right">
+                <td className="bg-white/[0.06] px-4 py-3 text-right">
                   {(() => {
                     const fyTotAB = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
                     const fyTotFC = months.reduce((s, m) => s + sumCells(revenueRows, m), 0)
                     return (
                       <>
-                        <span className="text-base font-bold text-[#374151] tabular-nums">{kFmt(fyTotAB)}</span>
+                        <span className="text-base font-bold text-white tabular-nums">{kFmt(fyTotAB)}</span>
                         {fyTotFC > fyTotAB && (
-                          <span className="block text-xs text-[#9CA3AF] tabular-nums">({kFmt(fyTotFC)} FC)</span>
+                          <span className="block text-xs text-white/25 tabular-nums">({kFmt(fyTotFC)} FC)</span>
                         )}
                       </>
                     )
@@ -379,8 +378,8 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
 
               {/* CB1% row */}
               <tr>
-                <td className="px-5 py-2.5 bg-[#F9F9F8] border-r border-[#E5E7EB]">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider">CB1%</span>
+                <td className="px-5 py-2.5 bg-white/[0.06] border-r border-white/[0.08]">
+                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">CB1%</span>
                 </td>
                 {featuredMonths.map(m => {
                   const rev  = sumByStatus(revenueRows, m, ['A', 'B'])
@@ -388,12 +387,12 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
                   const isCur = m === curMonth
                   return (
-                    <td key={m} className={`px-2 py-2.5 text-center border-r border-[#E5E7EB] ${isCur ? 'bg-[#EFF6FF]' : 'bg-[#F9F9F8]'}`}>
+                    <td key={m} className={`px-2 py-2.5 text-center border-r border-white/[0.08] ${isCur ? 'bg-[#1D3A5F]/50' : 'bg-white/[0.06]'}`}>
                       <span className={`text-sm font-bold tabular-nums ${
-                        pct == null ? 'text-[#9CA3AF]'
-                        : pct >= 20  ? 'text-[#16A34A]'
-                        : pct >= 0   ? 'text-[#D97706]'
-                        : 'text-[#DC2626]'
+                        pct == null ? 'text-white/20'
+                        : pct >= 20  ? 'text-[#4ADE80]'
+                        : pct >= 0   ? 'text-[#FCD34D]'
+                        : 'text-[#F87171]'
                       }`}>
                         {pct == null ? '—' : `${pct}%`}
                       </span>
@@ -401,17 +400,17 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   )
                 })}
                 {/* YTD CB1% */}
-                <td className="px-4 py-2.5 text-right bg-[#F9F9F8] border-r border-[#E5E7EB]">
+                <td className="px-4 py-2.5 text-right bg-white/[0.06] border-r border-white/[0.08]">
                   {(() => {
                     const rev  = ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
                     const cost = ytdMonths.reduce((s, m) => s + sumCells(costRows, m), 0)
                     const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
                     return (
                       <span className={`text-sm font-bold tabular-nums ${
-                        pct == null ? 'text-[#9CA3AF]'
-                        : pct >= 20  ? 'text-[#16A34A]'
-                        : pct >= 0   ? 'text-[#D97706]'
-                        : 'text-[#DC2626]'
+                        pct == null ? 'text-white/20'
+                        : pct >= 20  ? 'text-[#4ADE80]'
+                        : pct >= 0   ? 'text-[#FCD34D]'
+                        : 'text-[#F87171]'
                       }`}>
                         {pct == null ? '—' : `${pct}%`}
                       </span>
@@ -419,12 +418,12 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
                   })()}
                 </td>
                 {/* FY CB1% */}
-                <td className="px-4 py-2.5 text-right bg-[#F9F9F8]">
+                <td className="px-4 py-2.5 text-right bg-white/[0.06]">
                   <span className={`text-sm font-bold tabular-nums ${
-                    marginPct == null ? 'text-[#9CA3AF]'
-                    : marginPct >= 20  ? 'text-[#16A34A]'
-                    : marginPct >= 0   ? 'text-[#D97706]'
-                    : 'text-[#DC2626]'
+                    marginPct == null ? 'text-white/20'
+                    : marginPct >= 20  ? 'text-[#4ADE80]'
+                    : marginPct >= 0   ? 'text-[#FCD34D]'
+                    : 'text-[#F87171]'
                   }`}>
                     {marginPct == null ? '—' : `${marginPct}%`}
                   </span>
