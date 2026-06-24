@@ -42,17 +42,16 @@ function marginColour(pct: number | null): keyof typeof COLOUR {
   return 'red'
 }
 
-function KpiChip({ label, value, sub, colour = 'white', big }: {
+function KpiChip({ label, value, sub, colour = 'white' }: {
   label:   string
   value:   string
   sub?:    string
   colour?: keyof typeof COLOUR
-  big?:    boolean
 }) {
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-right">
-      <p className="text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-1.5">{label}</p>
-      <p className={`font-bold tabular-nums ${big ? 'text-3xl' : 'text-xl'} ${COLOUR[colour]}`}>{value}</p>
+    <div className="text-right">
+      <p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest mb-1">{label}</p>
+      <p className={`font-bold tabular-nums text-2xl ${COLOUR[colour]}`}>{value}</p>
       {sub && <p className="text-white/30 text-xs tabular-nums mt-0.5">{sub}</p>}
     </div>
   )
@@ -116,19 +115,19 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-5 px-2 group cursor-pointer">
+    <div className="flex flex-col items-center justify-center py-4 px-2 group cursor-pointer">
       <span
         onClick={() => { setDraft(amount === 0 ? '' : String(Math.round(amount / 1000))); setEditing(true) }}
-        className={`text-2xl font-bold tabular-nums leading-none ${textCls}`}
+        className={`text-3xl font-bold tabular-nums leading-none ${textCls}`}
       >
         {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
       </span>
       <button
         onClick={() => onSaveStatus?.(cycleStatus(status))}
-        className="mt-2 flex items-center gap-1 opacity-30 group-hover:opacity-70 transition-opacity"
+        className="mt-2 opacity-0 group-hover:opacity-60 transition-opacity flex items-center gap-1"
+        title={label}
       >
         <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">{label}</span>
       </button>
     </div>
   )
@@ -150,36 +149,71 @@ function OverviewSlide({ allRevenueRows, allCostRows, months, pods }: {
   const activePods = pods.filter(pod => allRevenueRows.some(r => r.pod_id === pod.id))
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-5xl font-bold text-white mb-1">Weekly P&L Review</h1>
-      <p className="text-white/40 mb-8 text-base">Full fiscal year overview</p>
+    <div className="max-w-5xl mx-auto">
+      {/* Hero */}
+      <div className="relative mb-12">
+        {/* Radial glow behind the number */}
+        <div className="absolute -top-16 -left-8 w-[480px] h-[320px] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <KpiChip big label="Revenue (A+B)" value={`${kFmt(totalRev)} kSEK`} />
-        <KpiChip big label="Costs" value={`${kFmt(totalCost)} kSEK`} />
-        <KpiChip big label="Gross margin" value={`${kFmt(margin)} kSEK`} colour={margin >= 0 ? 'green' : 'red'} />
-        <KpiChip big label="Margin %" value={marginPct != null ? `${marginPct}%` : '—'} colour={marginColour(marginPct)} />
+        <p className="relative text-white/30 text-xs font-bold uppercase tracking-widest mb-6">Weekly P&L Review</p>
+
+        <div className="relative flex items-end gap-10 mb-8">
+          <div>
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-2">Revenue A+B</p>
+            <p className="text-[88px] font-bold text-white leading-none tabular-nums tracking-tight">{kFmt(totalRev)}</p>
+            <p className="text-white/30 text-lg mt-2">kSEK full year</p>
+          </div>
+        </div>
+
+        {/* Secondary metrics */}
+        <div className="relative flex items-center gap-10">
+          <div>
+            <p className="text-white/30 text-xs uppercase tracking-widest mb-1">Costs</p>
+            <p className="text-4xl font-bold text-white/60 tabular-nums">{kFmt(totalCost)}<span className="text-xl text-white/30 ml-1">k</span></p>
+          </div>
+          <div className="w-px h-12 bg-white/10" />
+          <div>
+            <p className="text-white/30 text-xs uppercase tracking-widest mb-1">Gross Margin</p>
+            <p className={`text-4xl font-bold tabular-nums ${COLOUR[margin >= 0 ? 'green' : 'red']}`}>{kFmt(margin)}<span className="text-xl text-white/30 ml-1">k</span></p>
+          </div>
+          <div className="w-px h-12 bg-white/10" />
+          <div>
+            <p className="text-white/30 text-xs uppercase tracking-widest mb-1">CB1%</p>
+            <p className={`text-4xl font-bold tabular-nums ${COLOUR[marginColour(marginPct)]}`}>{marginPct != null ? `${marginPct}%` : '—'}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Per-pod summary */}
-      <div className="grid gap-3 mb-8" style={{ gridTemplateColumns: `repeat(${Math.min(activePods.length, 4)}, 1fr)` }}>
-        {activePods.map(pod => {
-          const rows    = allRevenueRows.filter(r => r.pod_id === pod.id)
-          const costs   = allCostRows.filter(r => r.pod_id === pod.id)
-          const rev     = months.reduce((s, m) => s + sumByStatus(rows, m, ['A', 'B']), 0)
-          const cost    = months.reduce((s, m) => s + sumCells(costs, m), 0)
-          const pct     = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
-          return (
-            <div key={pod.id} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-              <p className="text-white/50 text-xs font-semibold uppercase tracking-wider mb-2">{pod.name}</p>
-              <p className="text-white font-bold text-lg tabular-nums">{kFmt(rev)} <span className="text-white/40 text-sm">k</span></p>
-              <p className={`text-sm font-semibold mt-0.5 ${pct != null ? COLOUR[marginColour(pct)] : 'text-white/40'}`}>
-                {pct != null ? `${pct}% margin` : '—'}
-              </p>
-            </div>
-          )
-        })}
-      </div>
+      {/* Pod breakdown */}
+      {activePods.length > 0 && (
+        <div className="mb-8">
+          <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest mb-4">By pod</p>
+          <div className="grid grid-cols-2 gap-2">
+            {activePods.map(pod => {
+              const rows    = allRevenueRows.filter(r => r.pod_id === pod.id)
+              const costs   = allCostRows.filter(r => r.pod_id === pod.id)
+              const rev     = months.reduce((s, m) => s + sumByStatus(rows, m, ['A', 'B']), 0)
+              const cost    = months.reduce((s, m) => s + sumCells(costs, m), 0)
+              const pct     = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
+              const barW    = totalRev > 0 ? Math.max(4, Math.round((rev / totalRev) * 100)) : 0
+              return (
+                <div key={pod.id} className="relative overflow-hidden rounded-xl border border-white/[0.07] px-5 py-4">
+                  <div className="absolute inset-y-0 left-0 bg-white/[0.04] rounded-xl transition-all" style={{ width: `${barW}%` }} />
+                  <div className="relative flex items-center justify-between">
+                    <p className="text-white font-semibold">{pod.name}</p>
+                    <div className="text-right">
+                      <p className="text-white font-bold tabular-nums">{kFmt(rev)} <span className="text-white/30 text-sm">k</span></p>
+                      <p className={`text-xs font-semibold tabular-nums ${pct != null ? COLOUR[marginColour(pct)] : 'text-white/30'}`}>
+                        {pct != null ? `${pct}% CB1` : '—'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <AISummary allRevenueRows={allRevenueRows} allCostRows={allCostRows} months={months} />
     </div>
@@ -232,206 +266,181 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
             Showing {featuredMonths.map(m => monthLabel(m)).join(' · ')}
           </p>
         </div>
-        <div className="flex gap-3 shrink-0">
-          <KpiChip
-            label="Revenue A+B"
-            value={`${kFmt(totalRevAB)} k`}
-            sub={totalRevFC > totalRevAB ? `(FC: ${kFmt(totalRevFC)} k)` : undefined}
-          />
-          <KpiChip label="Costs" value={`${kFmt(totalCost)} k`} />
+        <div className="flex items-end gap-8 shrink-0">
+          <div className="text-right">
+            <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Revenue A+B</p>
+            <p className="text-3xl font-bold text-white tabular-nums">{kFmt(totalRevAB)} <span className="text-lg text-white/30">k</span></p>
+            {totalRevFC > totalRevAB && <p className="text-white/30 text-xs tabular-nums mt-0.5">FC: {kFmt(totalRevFC)} k</p>}
+          </div>
+          <div className="text-right">
+            <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">CB1%</p>
+            <p className={`text-3xl font-bold tabular-nums ${COLOUR[marginColour(marginPct)]}`}>
+              {marginPct != null ? `${marginPct}%` : '—'}
+            </p>
+          </div>
         </div>
       </div>
 
       {revenueRows.length === 0 ? (
         <p className="text-white/30">No clients in this pod.</p>
       ) : (
-        <div className="rounded-2xl overflow-hidden border border-white/[0.12]">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                {/* Client col */}
-                <th className="bg-white/[0.04] px-5 py-3 text-left border-b border-r border-white/[0.08] min-w-[200px]">
-                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Client</span>
-                </th>
-                {/* Featured month headers */}
-                {featuredMonths.map(m => {
-                  const isCur = m === curMonth
-                  return (
-                    <th
-                      key={m}
-                      className={`py-3 px-2 text-center border-b border-r border-white/[0.08] min-w-[120px] ${
-                        isCur ? 'bg-[#1D3A5F]/60' : 'bg-white/[0.04]'
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-0.5">
-                        {isCur && <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA] mb-0.5" />}
-                        <span className={`text-xs font-bold uppercase tracking-wider ${isCur ? 'text-[#93C5FD]' : 'text-white/40'}`}>
-                          {mLabel(m)}
-                        </span>
-                      </div>
-                    </th>
-                  )
-                })}
-                {/* YTD col */}
-                <th className="bg-white/[0.04] px-4 py-3 text-right border-b border-r border-white/[0.08] min-w-[96px]">
-                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">YTD A+B</span>
-                </th>
-                {/* FY total col */}
-                <th className="bg-white/[0.04] px-4 py-3 text-right border-b border-white/[0.08] min-w-[96px]">
-                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">FY Total</span>
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {revenueRows.map((row, ri) => {
-                const ytdRev  = ytdMonths.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
-                const fyAB    = months.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
-                const fyFC    = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
-                const isEven  = ri % 2 === 0
-
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-white/[0.08]">
+              <th className="pb-3 text-left min-w-[220px] pr-6" />
+              {featuredMonths.map(m => {
+                const isCur = m === curMonth
                 return (
-                  <tr key={row.id} className={`border-b border-white/[0.06] transition-colors hover:bg-white/[0.03] ${!isEven ? 'bg-white/[0.02]' : ''}`}>
-                    {/* Client name */}
-                    <td className="px-5 py-3 border-r border-white/[0.08]">
-                      <p className="text-base font-semibold text-white leading-tight">{row.client_name ?? '—'}</p>
-                      {row.project && <p className="text-xs text-white/35 mt-0.5">{row.project}</p>}
-                    </td>
-                    {/* Featured month cells */}
-                    {featuredMonths.map(m => {
-                      const cell    = row.cells[m] ?? { amount: 0, status: 'F' as PlanStatus }
-                      const isAging = m < curMonth && cell.status !== 'A'
-                      return (
-                        <td key={m} className={`border-r border-white/[0.08] p-0 ${m === curMonth ? 'bg-[#1D3A5F]/20' : ''}`}>
-                          <KeyCell
-                            amount={cell.amount}
-                            status={cell.status}
-                            isAging={isAging}
-                            isCurrent={m === curMonth}
-                            onSaveAmount={v => onSaveAmount(row.id, m, cell.status, v)}
-                            onSaveStatus={s => onSaveStatus(row.id, m, cell.amount, s)}
-                          />
-                        </td>
-                      )
-                    })}
-                    {/* YTD */}
-                    <td className="px-4 py-3 text-right border-r border-white/[0.08]">
-                      <span className="text-base font-semibold text-white/50 tabular-nums">
-                        {ytdRev === 0 ? '—' : kFmt(ytdRev)}
+                  <th key={m} className="pb-3 px-6 text-center min-w-[110px]">
+                    {isCur ? (
+                      <span className="inline-flex items-center gap-1.5 bg-[#2563EB]/20 border border-[#2563EB]/30 rounded-full px-3 py-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#60A5FA] shrink-0" />
+                        <span className="text-[#93C5FD] text-xs font-bold uppercase tracking-wide">{mLabel(m)}</span>
                       </span>
-                    </td>
-                    {/* FY total */}
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-base font-semibold text-white/50 tabular-nums">
-                        {fyAB === 0 ? '—' : kFmt(fyAB)}
-                      </span>
-                      {fyFC > fyAB && (
-                        <span className="block text-xs text-white/25 tabular-nums">({kFmt(fyFC)} FC)</span>
-                      )}
-                    </td>
-                  </tr>
+                    ) : (
+                      <span className="text-white/30 text-xs font-semibold uppercase tracking-wide">{mLabel(m)}</span>
+                    )}
+                  </th>
                 )
               })}
+              <th className="pb-3 px-6 text-right min-w-[90px]">
+                <span className="text-white/20 text-[10px] font-bold uppercase tracking-widest">YTD</span>
+              </th>
+              <th className="pb-3 px-6 text-right min-w-[90px]">
+                <span className="text-white/20 text-[10px] font-bold uppercase tracking-widest">Full Year</span>
+              </th>
+            </tr>
+          </thead>
 
-              {/* Totals row */}
-              <tr className="border-t border-white/20">
-                <td className="px-5 py-3 bg-white/[0.06] border-r border-white/[0.08]">
-                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Total</span>
-                </td>
-                {featuredMonths.map(m => {
-                  const totAB = sumByStatus(revenueRows, m, ['A', 'B'])
-                  const totFC = sumByStatus(revenueRows, m, ['F'])
-                  const isCur = m === curMonth
-                  return (
-                    <td key={m} className={`border-r border-white/[0.08] px-2 py-3 text-center ${isCur ? 'bg-[#1D3A5F]/50' : 'bg-white/[0.06]'}`}>
-                      <span className={`text-base font-bold tabular-nums ${isCur ? 'text-[#93C5FD]' : 'text-white'}`}>
-                        {totAB === 0 ? '—' : kFmt(totAB)}
-                      </span>
-                      {totFC > 0 && (
-                        <span className={`block text-xs tabular-nums ${isCur ? 'text-[#60A5FA]/50' : 'text-white/25'}`}>
-                          ({kFmt(totFC)} FC)
-                        </span>
-                      )}
-                    </td>
-                  )
-                })}
-                <td className="border-r border-white/[0.08] bg-white/[0.06] px-4 py-3 text-right">
-                  <span className="text-base font-bold text-white tabular-nums">
-                    {kFmt(ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0))}
-                  </span>
-                </td>
-                <td className="bg-white/[0.06] px-4 py-3 text-right">
-                  {(() => {
-                    const fyTotAB = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
-                    const fyTotFC = months.reduce((s, m) => s + sumCells(revenueRows, m), 0)
+          <tbody>
+            {revenueRows.map(row => {
+              const ytdRev  = ytdMonths.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
+              const fyAB    = months.reduce((s, m) => s + sumByStatus([row], m, ['A', 'B']), 0)
+              const fyFC    = months.reduce((s, m) => s + (row.cells[m]?.amount ?? 0), 0)
+
+              return (
+                <tr key={row.id} className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors">
+                  <td className="py-2 pr-6">
+                    <p className="text-lg font-semibold text-white leading-tight">{row.client_name ?? '—'}</p>
+                    {row.project && <p className="text-xs text-white/30 mt-0.5">{row.project}</p>}
+                  </td>
+                  {featuredMonths.map(m => {
+                    const cell    = row.cells[m] ?? { amount: 0, status: 'F' as PlanStatus }
+                    const isAging = m < curMonth && cell.status !== 'A'
                     return (
-                      <>
-                        <span className="text-base font-bold text-white tabular-nums">{kFmt(fyTotAB)}</span>
-                        {fyTotFC > fyTotAB && (
-                          <span className="block text-xs text-white/25 tabular-nums">({kFmt(fyTotFC)} FC)</span>
-                        )}
-                      </>
+                      <td key={m} className="px-6 py-0 text-center">
+                        <KeyCell
+                          amount={cell.amount}
+                          status={cell.status}
+                          isAging={isAging}
+                          isCurrent={m === curMonth}
+                          onSaveAmount={v => onSaveAmount(row.id, m, cell.status, v)}
+                          onSaveStatus={s => onSaveStatus(row.id, m, cell.amount, s)}
+                        />
+                      </td>
                     )
-                  })()}
-                </td>
-              </tr>
+                  })}
+                  <td className="px-6 py-2 text-right">
+                    <span className="text-base font-semibold text-white/40 tabular-nums">{ytdRev === 0 ? '—' : kFmt(ytdRev)}</span>
+                  </td>
+                  <td className="px-6 py-2 text-right">
+                    <span className="text-base font-semibold text-white/40 tabular-nums">{fyAB === 0 ? '—' : kFmt(fyAB)}</span>
+                    {fyFC > fyAB && <span className="block text-xs text-white/20 tabular-nums">({kFmt(fyFC)} FC)</span>}
+                  </td>
+                </tr>
+              )
+            })}
 
-              {/* CB1% row */}
-              <tr>
-                <td className="px-5 py-2.5 bg-white/[0.06] border-r border-white/[0.08]">
-                  <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">CB1%</span>
-                </td>
-                {featuredMonths.map(m => {
-                  const rev  = sumByStatus(revenueRows, m, ['A', 'B'])
-                  const cost = sumCells(costRows, m)
+            {/* Totals row */}
+            <tr className="border-t border-white/10">
+              <td className="pt-3 pb-2 pr-6">
+                <span className="text-[10px] font-bold text-white/25 uppercase tracking-widest">Total</span>
+              </td>
+              {featuredMonths.map(m => {
+                const totAB = sumByStatus(revenueRows, m, ['A', 'B'])
+                const totFC = sumByStatus(revenueRows, m, ['F'])
+                const isCur = m === curMonth
+                return (
+                  <td key={m} className="px-6 pt-3 pb-2 text-center">
+                    <span className={`text-lg font-bold tabular-nums ${isCur ? 'text-[#93C5FD]' : 'text-white'}`}>
+                      {totAB === 0 ? '—' : kFmt(totAB)}
+                    </span>
+                    {totFC > 0 && (
+                      <span className={`block text-xs tabular-nums ${isCur ? 'text-[#60A5FA]/40' : 'text-white/20'}`}>
+                        ({kFmt(totFC)} FC)
+                      </span>
+                    )}
+                  </td>
+                )
+              })}
+              <td className="px-6 pt-3 pb-2 text-right">
+                <span className="text-lg font-bold text-white tabular-nums">
+                  {kFmt(ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0))}
+                </span>
+              </td>
+              <td className="px-6 pt-3 pb-2 text-right">
+                {(() => {
+                  const fyTotAB = months.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
+                  const fyTotFC = months.reduce((s, m) => s + sumCells(revenueRows, m), 0)
+                  return (
+                    <>
+                      <span className="text-lg font-bold text-white tabular-nums">{kFmt(fyTotAB)}</span>
+                      {fyTotFC > fyTotAB && <span className="block text-xs text-white/20 tabular-nums">({kFmt(fyTotFC)} FC)</span>}
+                    </>
+                  )
+                })()}
+              </td>
+            </tr>
+
+            {/* CB1% row */}
+            <tr>
+              <td className="pt-1 pb-3 pr-6">
+                <span className="text-[10px] font-bold text-white/25 uppercase tracking-widest">CB1%</span>
+              </td>
+              {featuredMonths.map(m => {
+                const rev  = sumByStatus(revenueRows, m, ['A', 'B'])
+                const cost = sumCells(costRows, m)
+                const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
+                const isCur = m === curMonth
+                return (
+                  <td key={m} className="px-6 pt-1 pb-3 text-center">
+                    <span className={`text-sm font-bold tabular-nums ${
+                      pct == null ? 'text-white/20'
+                      : pct >= 20  ? 'text-[#4ADE80]'
+                      : pct >= 0   ? 'text-[#FCD34D]'
+                      : 'text-[#F87171]'
+                    } ${isCur ? 'opacity-100' : 'opacity-70'}`}>
+                      {pct == null ? '—' : `${pct}%`}
+                    </span>
+                  </td>
+                )
+              })}
+              <td className="px-6 pt-1 pb-3 text-right">
+                {(() => {
+                  const rev  = ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
+                  const cost = ytdMonths.reduce((s, m) => s + sumCells(costRows, m), 0)
                   const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
-                  const isCur = m === curMonth
                   return (
-                    <td key={m} className={`px-2 py-2.5 text-center border-r border-white/[0.08] ${isCur ? 'bg-[#1D3A5F]/50' : 'bg-white/[0.06]'}`}>
-                      <span className={`text-sm font-bold tabular-nums ${
-                        pct == null ? 'text-white/20'
-                        : pct >= 20  ? 'text-[#4ADE80]'
-                        : pct >= 0   ? 'text-[#FCD34D]'
-                        : 'text-[#F87171]'
-                      }`}>
-                        {pct == null ? '—' : `${pct}%`}
-                      </span>
-                    </td>
+                    <span className={`text-sm font-bold tabular-nums ${
+                      pct == null ? 'text-white/20'
+                      : pct >= 20  ? 'text-[#4ADE80]'
+                      : pct >= 0   ? 'text-[#FCD34D]'
+                      : 'text-[#F87171]'
+                    }`}>{pct == null ? '—' : `${pct}%`}</span>
                   )
-                })}
-                {/* YTD CB1% */}
-                <td className="px-4 py-2.5 text-right bg-white/[0.06] border-r border-white/[0.08]">
-                  {(() => {
-                    const rev  = ytdMonths.reduce((s, m) => s + sumByStatus(revenueRows, m, ['A', 'B']), 0)
-                    const cost = ytdMonths.reduce((s, m) => s + sumCells(costRows, m), 0)
-                    const pct  = rev > 0 ? Math.round(((rev - cost) / rev) * 100) : null
-                    return (
-                      <span className={`text-sm font-bold tabular-nums ${
-                        pct == null ? 'text-white/20'
-                        : pct >= 20  ? 'text-[#4ADE80]'
-                        : pct >= 0   ? 'text-[#FCD34D]'
-                        : 'text-[#F87171]'
-                      }`}>
-                        {pct == null ? '—' : `${pct}%`}
-                      </span>
-                    )
-                  })()}
-                </td>
-                {/* FY CB1% */}
-                <td className="px-4 py-2.5 text-right bg-white/[0.06]">
-                  <span className={`text-sm font-bold tabular-nums ${
-                    marginPct == null ? 'text-white/20'
-                    : marginPct >= 20  ? 'text-[#4ADE80]'
-                    : marginPct >= 0   ? 'text-[#FCD34D]'
-                    : 'text-[#F87171]'
-                  }`}>
-                    {marginPct == null ? '—' : `${marginPct}%`}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                })()}
+              </td>
+              <td className="px-6 pt-1 pb-3 text-right">
+                <span className={`text-sm font-bold tabular-nums ${
+                  marginPct == null ? 'text-white/20'
+                  : marginPct >= 20  ? 'text-[#4ADE80]'
+                  : marginPct >= 0   ? 'text-[#FCD34D]'
+                  : 'text-[#F87171]'
+                }`}>{marginPct == null ? '—' : `${marginPct}%`}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       )}
     </div>
   )
