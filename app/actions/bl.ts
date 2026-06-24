@@ -94,22 +94,116 @@ export async function approveBLInvoice(invoiceId: string): Promise<{ error?: str
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('invoice_number, client_name, amount_sek')
+    .select('invoice_number, client_name, amount_sek, issue_date, due_date, exclude_vat, bl_line_desc, bl_your_reference, bl_our_reference, bl_po_number, bl_marking')
     .eq('id', invoiceId)
     .single()
 
-  const admin = createAdminSupabase()
-  const { data: settings } = await admin
-    .from('app_settings')
-    .select('bl_client_id')
-    .limit(1)
-    .maybeSingle()
+  const isStub = !process.env.LUNDIFY_CLIENT_ID || !process.env.LUNDIFY_CLIENT_SECRET
 
-  const isStub = !(settings as Record<string, string | null> | null)?.bl_client_id
+  if (isStub) {
+    const blInvoiceId = `STUB-${Date.now()}`
+    const { error: updateErr } = await supabase
+      .from('invoices')
+      .update({ bl_status: 'approved', bl_invoice_id: blInvoiceId })
+      .eq('id', invoiceId)
+    if (updateErr) return { error: updateErr.message }
+    const kSEK = inv ? Math.round((inv.amount_sek as number) / 1000) : '?'
+    await sendGoogleChatNotification(`✅ Invoice #${inv?.invoice_number ?? '—'} (${inv?.client_name ?? '—'} · ${kSEK} kSEK) approved — BL draft created (stub)`)
+    return {}
+  }
 
-  const blInvoiceId = isStub
-    ? `STUB-${Date.now()}`
-    : 'BL-LIVE-NOT-IMPLEMENTED'
+  // Live mode — OAuth2 client credentials + Lundify API
+
+  const authUrl = (process.env.LUNDIFY_AUTH_URL || 'https://id.bjornlunden.se/connect/token')
+  const apiUrl  = (process.env.LUNDIFY_BASE_URL  || 'https://api.bjornlunden.se/v2').replace(/\/$/, '')
+
+  // Step 1: fetch OAuth token
+  let token: string
+  try {
+    const tokenRes = await fetch(authUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type:    'client_credentials',
+        client_id:     process.env.LUNDIFY_CLIENT_ID!,
+        client_secret: process.env.LUNDIFY_CLIENT_SECRET!,
+      }).toString(),
+    })
+    if (!tokenRes.ok) {
+      const text = await tokenRes.text()
+      return { error: `Lundify auth failed (${tokenRes.status}): ${text.slice(0, 300)}` }
+    }
+    const tokenData = await tokenRes.json() as Record<string, unknown>
+    token = tokenData.access_token as string
+    if (!token) return { error: 'Lundify auth: no access_token in response' }
+  } catch (err) {
+    return { error: `Lundify auth: ${err instanceof Error ? err.message : 'request failed'}` }
+  }
+
+  const apiHeaders: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type':  'application/json',
+  }
+  if (process.env.LUNDIFY_USER_KEY) apiHeaders['X-User-Key'] = process.env.LUNDIFY_USER_KEY
+
+  // Step 2: look up customer by name to get customer number (best effort)
+  let customerNumber: string | null = null
+  try {
+    const custRes = await fetch(
+      `${apiUrl}/customer?$filter=Name eq '${(inv?.client_name ?? '').replace(/'/g, "''")}'`,
+      { headers: apiHeaders },
+    )
+    if (custRes.ok) {
+      const custData = await custRes.json() as Record<string, unknown>
+      const list = Array.isArray(custData) ? custData as unknown[]
+        : Array.isArray(custData.value)    ? custData.value as unknown[]
+        : Array.isArray(custData.items)    ? custData.items as unknown[]
+        : []
+      if (list.length > 0) {
+        const c = list[0] as Record<string, unknown>
+        customerNumber = (c.CustomerNumber ?? c.customerNumber ?? c.Number ?? null) as string | null
+      }
+    }
+  } catch {
+    // Proceed without customer number — BL may match on name or prompt to create
+  }
+
+  // Step 3: create sales document (invoice draft)
+  const payload = {
+    Type:           1,
+    CustomerNumber: customerNumber,
+    InvoiceDate:    inv?.issue_date,
+    DueDate:        inv?.due_date,
+    YourReference:  inv?.bl_your_reference || null,
+    OurReference:   inv?.bl_our_reference  || null,
+    OrderNumber:    inv?.invoice_number    || null,
+    Marking:        inv?.bl_marking        || null,
+    Rows: [{
+      Description: inv?.bl_line_desc || `Invoice ${inv?.invoice_number ?? ''}`,
+      Quantity:    1,
+      UnitPrice:   inv?.amount_sek ?? 0,
+      VatCode:     inv?.exclude_vat ? 'MP0' : 'MP1',
+    }],
+  }
+
+  let blInvoiceId: string
+  try {
+    const docRes = await fetch(`${apiUrl}/salesdocument`, {
+      method:  'POST',
+      headers: apiHeaders,
+      body:    JSON.stringify(payload),
+    })
+    if (!docRes.ok) {
+      const text = await docRes.text()
+      return { error: `Lundify create invoice failed (${docRes.status}): ${text.slice(0, 400)}` }
+    }
+    const docData = await docRes.json() as Record<string, unknown>
+    blInvoiceId = String(
+      docData.DocumentNumber ?? docData.documentNumber ?? docData.Id ?? docData.id ?? Date.now()
+    )
+  } catch (err) {
+    return { error: `Lundify create invoice: ${err instanceof Error ? err.message : 'request failed'}` }
+  }
 
   const { error: updateErr } = await supabase
     .from('invoices')
@@ -118,11 +212,10 @@ export async function approveBLInvoice(invoiceId: string): Promise<{ error?: str
 
   if (updateErr) return { error: updateErr.message }
 
-  const kSEK = inv ? Math.round(inv.amount_sek / 1000) : '?'
-  const suffix = isStub ? ' (stub)' : ''
-  const msg = `✅ Invoice #${inv?.invoice_number ?? '—'} (${inv?.client_name ?? '—'} · ${kSEK} kSEK) approved — BL draft created${suffix}`
-
-  await sendGoogleChatNotification(msg)
+  const kSEK = inv ? Math.round((inv.amount_sek as number) / 1000) : '?'
+  await sendGoogleChatNotification(
+    `✅ Invoice #${inv?.invoice_number ?? '—'} (${inv?.client_name ?? '—'} · ${kSEK} kSEK) approved — BL draft #${blInvoiceId} created`
+  )
   return {}
 }
 
@@ -298,6 +391,10 @@ export async function initiateAllieInvoices(notify = true): Promise<{ initiated:
   }
 
   return { initiated, errors }
+}
+
+export async function getBLCredentialsConfigured(): Promise<boolean> {
+  return !!(process.env.LUNDIFY_CLIENT_ID && process.env.LUNDIFY_CLIENT_SECRET)
 }
 
 export async function getBLBetaEnabled(): Promise<boolean> {

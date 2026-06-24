@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { getAllowedEmails, addAllowedEmail, removeAllowedEmail, getFeatureFlag, setFeatureFlag, getAppSetting, setAppSetting } from '@/app/actions/admin'
-import { getBLBetaEnabled, getAllieInvoiceEnabled, initiateAllieInvoices } from '@/app/actions/bl'
+import { getBLBetaEnabled, getAllieInvoiceEnabled, initiateAllieInvoices, getBLCredentialsConfigured } from '@/app/actions/bl'
 import { sendGoogleChatNotification } from '@/app/actions/invoices'
 
 interface Entry { email: string; created_at: string; last_login_at: string | null }
@@ -32,13 +32,7 @@ export default function AdminPage() {
   const [webhookSaved,  setWebhookSaved]  = useState(false)
   const [blBetaEnabled,   setBlBetaEnabled]   = useState(false)
   const [blBetaSaving,    setBlBetaSaving]    = useState(false)
-  const [blClientId,      setBlClientId]      = useState('')
-  const [blClientSecret,  setBlClientSecret]  = useState('')
-  const [blDatabaseGuid,  setBlDatabaseGuid]  = useState('')
-  const [blAuthUrl,       setBlAuthUrl]       = useState('')
-  const [blApiUrl,        setBlApiUrl]        = useState('')
-  const [blCredSaving,         setBlCredSaving]         = useState(false)
-  const [blCredSaved,          setBlCredSaved]          = useState(false)
+  const [blCredsConfigured, setBlCredsConfigured] = useState(false)
   const [allieInvoiceEnabled,  setAllieInvoiceEnabled]  = useState(false)
   const [allieInvoiceSaving,   setAllieInvoiceSaving]   = useState(false)
   const [cronEnabled,          setCronEnabled]          = useState(true)
@@ -63,24 +57,16 @@ export default function AdminPage() {
       setLoading(false)
     }
     // Load app settings separately — columns may not exist yet
-    const [webhook, blBeta, blCid, blSecret, blGuid, blAuth, blApi, allieInv, cronFlag] = await Promise.all([
+    const [webhook, blBeta, blCreds, allieInv, cronFlag] = await Promise.all([
       getAppSetting('revenue_plan_webhook_url'),
       getBLBetaEnabled(),
-      getAppSetting('bl_client_id'),
-      getAppSetting('bl_client_secret'),
-      getAppSetting('bl_database_guid'),
-      getAppSetting('bl_auth_url'),
-      getAppSetting('bl_api_url'),
+      getBLCredentialsConfigured(),
       getAllieInvoiceEnabled(),
       getAppSetting('cron_enabled'),
     ])
     setWebhookUrl(webhook ?? '')
     setBlBetaEnabled(blBeta)
-    setBlClientId(blCid ?? '')
-    setBlClientSecret(blSecret ?? '')
-    setBlDatabaseGuid(blGuid ?? '')
-    setBlAuthUrl(blAuth ?? '')
-    setBlApiUrl(blApi ?? '')
+    setBlCredsConfigured(blCreds)
     setAllieInvoiceEnabled(allieInv)
     setCronEnabled(cronFlag !== 'false')
   }
@@ -123,21 +109,6 @@ export default function AdminPage() {
     if (result.error) { setCronEnabled(!next); setError(result.error) }
   }
 
-  async function handleSaveBLCredentials(e: React.FormEvent) {
-    e.preventDefault()
-    setBlCredSaving(true)
-    setBlCredSaved(false)
-    await Promise.all([
-      setAppSetting('bl_client_id',     blClientId.trim()),
-      setAppSetting('bl_client_secret', blClientSecret.trim()),
-      setAppSetting('bl_database_guid', blDatabaseGuid.trim()),
-      setAppSetting('bl_auth_url',      blAuthUrl.trim()),
-      setAppSetting('bl_api_url',       blApiUrl.trim()),
-    ])
-    setBlCredSaving(false)
-    setBlCredSaved(true)
-    setTimeout(() => setBlCredSaved(false), 2000)
-  }
 
   useEffect(() => { load() }, [])
 
@@ -314,9 +285,9 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                blClientId.trim() ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#F3F4F6] text-[#9CA3AF]'
+                blCredsConfigured ? 'bg-[#F0FDF4] text-[#16A34A]' : 'bg-[#FFF7ED] text-[#C2410C]'
               }`}>
-                {blClientId.trim() ? 'Configured' : 'Not configured'}
+                {blCredsConfigured ? 'Live mode' : 'Stub mode'}
               </span>
               <button
                 role="switch"
@@ -353,68 +324,25 @@ export default function AdminPage() {
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${allieInvoiceEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
-            <form onSubmit={handleSaveBLCredentials} className="px-5 py-4 space-y-3 border-t border-[#F3F4F6]">
-              <p className="text-xs text-[#9CA3AF]">OAuth 2.0 credentials for the Björn Lundén API. Leave blank to run in stub mode.</p>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="px-5 py-4 border-t border-[#F3F4F6]">
+              <div className={`flex items-start gap-3 px-3 py-3 rounded-xl border text-xs ${
+                blCredsConfigured
+                  ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
+                  : 'bg-[#FFF7ED] border-[#FED7AA] text-[#9A3412]'
+              }`}>
+                <span className="text-base leading-none mt-0.5">{blCredsConfigured ? '✅' : '⚠️'}</span>
                 <div>
-                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Client ID</label>
-                  <input
-                    value={blClientId}
-                    onChange={e => setBlClientId(e.target.value)}
-                    placeholder="bl_client_id"
-                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Client secret</label>
-                  <input
-                    type="password"
-                    value={blClientSecret}
-                    onChange={e => setBlClientSecret(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
-                  />
+                  <p className="font-medium mb-0.5">
+                    {blCredsConfigured ? 'Lundify credentials configured — live mode active' : 'Lundify credentials not set — running in stub mode'}
+                  </p>
+                  <p className="opacity-80">
+                    Manage <code className="font-mono">LUNDIFY_CLIENT_ID</code>, <code className="font-mono">LUNDIFY_CLIENT_SECRET</code>,{' '}
+                    <code className="font-mono">LUNDIFY_USER_KEY</code>, <code className="font-mono">LUNDIFY_AUTH_URL</code>,{' '}
+                    and <code className="font-mono">LUNDIFY_BASE_URL</code> in Vercel → Project → Settings → Environment Variables.
+                  </p>
                 </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Database GUID</label>
-                <input
-                  value={blDatabaseGuid}
-                  onChange={e => setBlDatabaseGuid(e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">Auth URL</label>
-                  <input
-                    value={blAuthUrl}
-                    onChange={e => setBlAuthUrl(e.target.value)}
-                    placeholder="https://auth.bjornlunden.se/…"
-                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider mb-1">API Base URL</label>
-                  <input
-                    value={blApiUrl}
-                    onChange={e => setBlApiUrl(e.target.value)}
-                    placeholder="https://api.bjornlunden.se/…"
-                    className="w-full px-3 py-1.5 text-xs border border-[#EBEBEB] rounded-xl bg-[#F9F9F8] focus:outline-none focus:border-[#61b5cc] font-mono"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={blCredSaving}
-                  className="px-4 py-1.5 rounded-xl bg-[#61b5cc] text-white text-sm font-medium hover:bg-[#4fa0b8] transition-colors disabled:opacity-40"
-                >
-                  {blCredSaved ? 'Saved ✓' : blCredSaving ? 'Saving…' : 'Save credentials'}
-                </button>
-              </div>
-            </form>
+            </div>
             </>
           )}
         </div>
