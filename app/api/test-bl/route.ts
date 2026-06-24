@@ -80,6 +80,24 @@ export async function GET() {
     results.all_keys = { ok: false, error: err instanceof Error ? err.message : 'fetch failed' }
   }
 
+  // ── Step 3b: probe each key to identify which is customer invoicing ──────
+  try {
+    const keys: string[] = JSON.parse(results.all_keys.ok ? (results.all_keys as {ok:true;detail:string}).detail : '[]')
+    const probes: Record<string, string> = {}
+    for (const key of keys) {
+      try {
+        const r = await fetch(`${api}/common/client`, { headers: { 'Authorization': `Bearer ${token}`, 'User-Key': key } })
+        const t = await r.text()
+        probes[key] = r.ok ? t.slice(0, 300) : `HTTP ${r.status}: ${t.slice(0, 200)}`
+      } catch (e) {
+        probes[key] = e instanceof Error ? e.message : 'failed'
+      }
+    }
+    results.key_probe = { ok: true, detail: JSON.stringify(probes) }
+  } catch (err) {
+    results.key_probe = { ok: false, error: err instanceof Error ? err.message : 'failed' }
+  }
+
   // ── Step 4: customer list ping (with current User-Key) ───────────────────
   try {
     const res  = await fetch(`${api}/customer?$top=1`, { headers: apiHeaders })
