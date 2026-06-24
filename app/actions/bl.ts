@@ -122,12 +122,11 @@ export async function approveBLInvoice(invoiceId: string): Promise<{ error?: str
   try {
     const tokenRes = await fetch(authUrl, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type:    'client_credentials',
-        client_id:     process.env.LUNDIFY_CLIENT_ID!,
-        client_secret: process.env.LUNDIFY_CLIENT_SECRET!,
-      }).toString(),
+      headers: {
+        'Content-Type':  'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${Buffer.from(`${process.env.LUNDIFY_CLIENT_ID}:${process.env.LUNDIFY_CLIENT_SECRET}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({ grant_type: 'client_credentials' }).toString(),
     })
     if (!tokenRes.ok) {
       const text = await tokenRes.text()
