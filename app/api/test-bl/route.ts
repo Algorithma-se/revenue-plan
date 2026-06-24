@@ -65,12 +65,27 @@ export async function GET() {
   if (userKey) apiHeaders['User-Key'] = userKey
   const api = baseUrl.replace(/\/$/, '')
 
-  // ── Step 3: customer list ping ───────────────────────────────────────────
+  // ── Step 3: list all available service provider keys ────────────────────
+  // This shows every company/SP the token has access to — find the right User-Key here
+  const headersNoUserKey = { 'Authorization': `Bearer ${token}` }
   try {
-    const res = await fetch(`${api}/customer?$top=1`, { headers: apiHeaders })
+    const res  = await fetch(`${api}/meta/allKeys`, { headers: headersNoUserKey })
     const body = await res.text()
     if (!res.ok) {
-      results.customer_ping = { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 300)}` }
+      results.all_keys = { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 500)}` }
+    } else {
+      results.all_keys = { ok: true, detail: body.slice(0, 2000) }
+    }
+  } catch (err) {
+    results.all_keys = { ok: false, error: err instanceof Error ? err.message : 'fetch failed' }
+  }
+
+  // ── Step 4: customer list ping (with current User-Key) ───────────────────
+  try {
+    const res  = await fetch(`${api}/customer?$top=1`, { headers: apiHeaders })
+    const body = await res.text()
+    if (!res.ok) {
+      results.customer_ping = { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 500)}` }
     } else {
       let count = '?'
       try {

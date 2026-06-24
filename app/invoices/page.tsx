@@ -7,7 +7,7 @@ import type {
   SowDocument, Invoice, InvoiceDraft, InvoiceSuggestion, InvoiceStatus, SowParsedRaw,
 } from '@/types/database'
 import { getInvoices, getInvoicesByClientName, getUnassignedInvoices, getAllInvoiceItems, saveInvoicesForClient, setClientVat } from '@/app/actions/invoices'
-import { getBLBetaEnabled } from '@/app/actions/bl'
+import { getBLBetaEnabled, getBLCredentialsConfigured } from '@/app/actions/bl'
 import { getSowDocuments, getSowDownloadUrl, deleteSow } from '@/app/actions/sow'
 import { SowTermsModal } from '@/components/sow/SowTermsModal'
 import { InvoiceTable } from '@/components/sow/InvoiceTable'
@@ -141,7 +141,7 @@ function InvoicesContent() {
       if (enabled) {
         // check stub by looking at bl_client_id via the already-loaded settings
         import('@/app/actions/admin').then(({ getAppSetting }) =>
-          getAppSetting('bl_client_id').then(cid => setBlIsStub(!cid))
+          getBLCredentialsConfigured().then(configured => setBlIsStub(!configured))
         )
       }
     })
