@@ -24,7 +24,7 @@ export async function GET() {
     .filter(k => !process.env[k])
 
   results.env_vars = missing.length === 0
-    ? { ok: true, detail: 'All 5 vars present' }
+    ? { ok: true, detail: `All 5 vars present — auth: ${authUrl}, base: ${baseUrl}` }
     : { ok: false, error: `Missing: ${missing.join(', ')}` }
 
   if (!clientId || !clientSecret || !authUrl || !baseUrl) {
@@ -44,7 +44,7 @@ export async function GET() {
     })
     const body = await res.text()
     if (!res.ok) {
-      results.oauth_token = { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 300)}` }
+      results.oauth_token = { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 1500)}` }
     } else {
       const data = JSON.parse(body) as Record<string, unknown>
       token = data.access_token as string | null
