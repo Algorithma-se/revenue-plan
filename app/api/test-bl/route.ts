@@ -80,15 +80,16 @@ export async function GET() {
     results.all_keys = { ok: false, error: err instanceof Error ? err.message : 'fetch failed' }
   }
 
-  // ── Step 3b: probe each key to identify which is customer invoicing ──────
+  // ── Step 3b: probe each key for salesdocument access ────────────────────
   try {
     const keys: string[] = JSON.parse(results.all_keys.ok ? (results.all_keys as {ok:true;detail:string}).detail : '[]')
     const probes: Record<string, string> = {}
     for (const key of keys) {
       try {
-        const r = await fetch(`${api}/common/client`, { headers: { 'Authorization': `Bearer ${token}`, 'User-Key': key } })
+        // Try GET salesdocument — 200/ok = has access, 403 = wrong key
+        const r = await fetch(`${api}/salesdocument?$top=1`, { headers: { 'Authorization': `Bearer ${token}`, 'User-Key': key } })
         const t = await r.text()
-        probes[key] = r.ok ? t.slice(0, 300) : `HTTP ${r.status}: ${t.slice(0, 200)}`
+        probes[key] = `salesdocument: HTTP ${r.status} — ${t.slice(0, 400)}`
       } catch (e) {
         probes[key] = e instanceof Error ? e.message : 'failed'
       }
