@@ -61,7 +61,7 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
   async function commit() {
     setEditing(false)
     if (!onSaveAmount) return
-    const parsed    = parseFloat(draft)
+    const parsed    = parseFloat(draft.replace(',', '.'))
     const newAmount = isNaN(parsed) ? 0 : Math.round(parsed * 1000)
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
@@ -85,9 +85,10 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
       <div className="flex items-center justify-center py-4 px-3">
         <input
           ref={inputRef}
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={draft}
-          onChange={e => setDraft(e.target.value)}
+          onChange={e => setDraft(e.target.value.replace(/[^0-9.,]/g, ''))}
           onBlur={commit}
           onKeyDown={e => {
             if (e.key === 'Enter')  { e.preventDefault(); commit() }

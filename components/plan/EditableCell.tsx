@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { PlanStatus } from '@/types/database'
 import { StatusBadge } from './StatusBadge'
 
@@ -19,10 +19,6 @@ export function EditableCell({
   const [draft, setDraft]     = useState('')
   const inputRef              = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (editing) inputRef.current?.select()
-  }, [editing])
-
   function startEdit() {
     if (readonly || editing) return
     setDraft(amount === 0 ? '' : String(Math.round(amount / 1000)))
@@ -32,7 +28,8 @@ export function EditableCell({
   async function commit() {
     setEditing(false)
     if (!onSaveAmount) return
-    const parsed = parseFloat(draft)
+    // accept both period and comma as decimal separator
+    const parsed    = parseFloat(draft.replace(',', '.'))
     const newAmount = isNaN(parsed) ? 0 : Math.round(parsed * 1000)
     if (newAmount !== amount) await onSaveAmount(newAmount)
   }
@@ -47,13 +44,17 @@ export function EditableCell({
       <div className="flex items-center px-1 py-1 min-h-[36px]">
         <input
           ref={inputRef}
-          type="number"
+          autoFocus
+          // text + inputMode avoids browser spinner arrows while keeping numeric keyboard on mobile
+          type="text"
+          inputMode="decimal"
           value={draft}
-          onChange={e => setDraft(e.target.value)}
+          onChange={e => setDraft(e.target.value.replace(/[^0-9.,]/g, ''))}
           onBlur={commit}
           onKeyDown={e => {
-            if (e.key === 'Enter') { e.preventDefault(); commit() }
-            if (e.key === 'Escape') setEditing(false)
+            if (e.key === 'Enter')  { e.preventDefault(); commit() }
+            if (e.key === 'Escape') { setEditing(false) }
+            // Tab: let browser move focus naturally — onBlur fires commit first
           }}
           className="w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
         />
@@ -62,7 +63,13 @@ export function EditableCell({
   }
 
   return (
-    <div className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] ${cellBg} transition-colors`}>
+    <div
+      tabIndex={readonly ? -1 : 0}
+      onFocus={startEdit}
+      className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] outline-none
+        focus-visible:ring-1 focus-visible:ring-[#61b5cc] focus-visible:rounded
+        ${cellBg} transition-colors`}
+    >
       <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} isEmpty={amount === 0} />
       <div
         onClick={startEdit}
