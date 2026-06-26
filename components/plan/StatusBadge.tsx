@@ -25,6 +25,7 @@ export function StatusBadge({
     : COLORS[status]
   return (
     <span
+      onMouseDown={e => { if (!readonly) e.preventDefault() }}
       onClick={e => {
         if (readonly) return
         e.stopPropagation()
