@@ -247,7 +247,7 @@ function PodSlide({ pod, revenueRows, costRows, months, onSaveAmount, onSaveStat
             Showing {featuredMonths.map(m => monthLabel(m)).join(' · ')}
           </p>
         </div>
-        <div className="flex items-end gap-8 shrink-0">
+        <div className="flex items-start gap-8 shrink-0">
           <div className="text-right">
             <p className="text-[#9CA3AF] text-[10px] uppercase tracking-widest mb-1">Revenue A+B</p>
             <p className="text-3xl font-bold text-[#0F0F0F] tabular-nums">{kFmt(totalRevAB)} <span className="text-lg text-[#9CA3AF]">k</span></p>
