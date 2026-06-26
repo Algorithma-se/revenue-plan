@@ -169,7 +169,7 @@ function OverviewSlide({ allRevenueRows, allCostRows, months, pods }: {
           </div>
           <div className="w-px h-10 bg-[#E5E7EB]" />
           <div>
-            <p className="text-[#9CA3AF] text-xs uppercase tracking-widest mb-1">CB1%</p>
+            <p className="text-[#9CA3AF] text-xs uppercase tracking-widest mb-1">OPM%</p>
             <p className={`text-4xl font-bold tabular-nums ${COLOUR[marginColour(marginPct)]}`}>{marginPct != null ? `${marginPct}%` : '—'}</p>
           </div>
         </div>
