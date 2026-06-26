@@ -100,21 +100,30 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
     )
   }
 
+  const badgeCls =
+    isAging && amount > 0 ? 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
+    : status === 'A'      ? 'bg-[#F0FDF4] text-[#16A34A] border-[#BBF7D0]'
+    : status === 'B'      ? 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]'
+    :                       'bg-[#F3F4F6] text-[#9CA3AF] border-[#E5E7EB]'
+
   return (
-    <div className="flex flex-col items-center justify-center py-4 px-2 group cursor-pointer">
+    <div className="flex flex-col items-center justify-center py-4 px-2 gap-2">
       <span
         onClick={() => { setDraft(amount === 0 ? '' : String(Math.round(amount / 1000))); setEditing(true) }}
-        className={`text-3xl font-bold tabular-nums leading-none ${textCls}`}
+        className={`text-3xl font-bold tabular-nums leading-none cursor-text ${textCls}`}
       >
         {amount === 0 ? '—' : Math.round(amount / 1000).toLocaleString('sv-SE')}
       </span>
-      <button
-        onClick={() => onSaveStatus?.(cycleStatus(status))}
-        className="mt-2 opacity-0 group-hover:opacity-60 transition-opacity flex items-center gap-1"
-        title={label}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
-      </button>
+      {onSaveStatus && (
+        <button
+          onClick={() => onSaveStatus(cycleStatus(status))}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide transition-opacity hover:opacity-75 ${badgeCls}`}
+          title={`Click to cycle status (${label})`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} />
+          {isAging && amount > 0 ? 'Aging' : status}
+        </button>
+      )}
     </div>
   )
 }
