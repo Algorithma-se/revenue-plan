@@ -116,7 +116,7 @@ function KeyCell({ amount, status, isAging, isCurrent, onSaveAmount, onSaveStatu
       </span>
       {onSaveStatus && (
         <button
-          onClick={() => onSaveStatus(cycleStatus(status))}
+          onClick={e => { e.stopPropagation(); onSaveStatus(cycleStatus(status)) }}
           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold uppercase tracking-wide transition-opacity hover:opacity-75 ${badgeCls}`}
           title={`Click to cycle status (${label})`}
         >
