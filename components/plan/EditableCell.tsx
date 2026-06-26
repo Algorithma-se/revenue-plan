@@ -41,11 +41,11 @@ export function EditableCell({
 
   if (editing) {
     return (
-      <div className="flex items-center px-1 py-1 min-h-[36px]">
+      <div className="flex items-center gap-1 px-1 py-1 min-h-[36px]">
+        <StatusBadge status={status} onCycle={onSaveStatus} readonly={readonly || !onSaveStatus} isEmpty={amount === 0} />
         <input
           ref={inputRef}
           autoFocus
-          // text + inputMode avoids browser spinner arrows while keeping numeric keyboard on mobile
           type="text"
           inputMode="decimal"
           value={draft}
@@ -54,9 +54,8 @@ export function EditableCell({
           onKeyDown={e => {
             if (e.key === 'Enter')  { e.preventDefault(); commit() }
             if (e.key === 'Escape') { setEditing(false) }
-            // Tab: let browser move focus naturally — onBlur fires commit first
           }}
-          className="w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
+          className="min-w-0 w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
         />
       </div>
     )
