@@ -65,7 +65,7 @@ export function EditableCell({
   return (
     <div
       tabIndex={readonly ? -1 : 0}
-      onFocus={startEdit}
+      onFocus={e => { if (e.target === e.currentTarget) startEdit() }}
       className={`flex items-center justify-end gap-1 px-1 py-1 min-h-[36px] outline-none
         focus-visible:ring-1 focus-visible:ring-[#61b5cc] focus-visible:rounded
         ${cellBg} transition-colors`}
