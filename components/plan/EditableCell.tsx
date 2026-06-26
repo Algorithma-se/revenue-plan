@@ -55,7 +55,7 @@ export function EditableCell({
             if (e.key === 'Enter')  { e.preventDefault(); commit() }
             if (e.key === 'Escape') { setEditing(false) }
           }}
-          className="min-w-0 w-full text-right text-xs bg-[#EFF6FF] border border-[#61b5cc] rounded px-1 py-0.5 outline-none"
+          className="min-w-0 w-full text-right text-xs bg-[#EFF6FF] ring-1 ring-[#61b5cc] rounded px-1 outline-none"
         />
       </div>
     )
