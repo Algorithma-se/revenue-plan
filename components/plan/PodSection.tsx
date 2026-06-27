@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell } from '@/types/database'
+import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell, ItemSegment } from '@/types/database'
 import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
 import type { Trend } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
@@ -72,7 +72,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, sowDocItemIds, isNoPod, showOnly, mobileMonth,
+  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, sowDocItemIds, isNoPod, showOnly, mobileMonth, defaultSegment,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -89,15 +89,16 @@ export function PodSection({
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
   mobileMonth?: string
+  defaultSegment?: ItemSegment
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostStatus:    (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onAddRevenue:        (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onAddRevenue:        (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
+  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
   onDeleteRevenue:     (rowId: string) => Promise<void>
-  onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
-  onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
+  onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
+  onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
 }) {
   const storageKey = `plan-collapse-${pod.id}${showOnly ? '-' + showOnly : ''}`
@@ -170,9 +171,11 @@ export function PodSection({
       month: r.month, amount: r.amount, status: (r.status as PlanStatus) ?? 'F',
     }))
     const notes = data.notes.trim() || null
-    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, notes, cells)
-    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, notes, cells)
+    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, notes, cells, data.segment, data.accountCode)
+    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, notes, cells, data.segment, data.accountCode)
   }
+
+  const podInitialId = defaultSegment && defaultSegment !== 'services' ? null : pod.id
 
   const CS = colStyle(months.length)
 
@@ -485,7 +488,8 @@ export function PodSection({
         <ItemModal
           mode="manual"
           pods={pods}
-          initialPodId={pod.id}
+          initialPodId={podInitialId}
+          initialSegment={defaultSegment ?? 'services'}
           initialRows={[]}
           onClose={() => setAddingRevenue(false)}
           onSave={async data => {
@@ -503,6 +507,8 @@ export function PodSection({
           initialComment={editingRevenueRow.project ?? ''}
           initialPodId={editingRevenueRow.pod_id}
           initialNotes={editingRevenueRow.notes ?? ''}
+          initialSegment={editingRevenueRow.segment}
+          initialAccountCode={editingRevenueRow.account_code}
           initialRows={revenueRowsForModal(editingRevenueRow)}
           onClose={() => setEditingRevenueRow(null)}
           onSave={async data => {
@@ -520,10 +526,11 @@ export function PodSection({
         <CostItemModal
           mode="add"
           pods={pods}
-          defaultPodId={pod.id}
+          defaultPodId={podInitialId}
+          defaultSegment={defaultSegment}
           onClose={() => setAddingCost(false)}
-          onSave={async (category, comment, podId, cells) => {
-            await onAddCost(category, comment, podId, cells)
+          onSave={async (category, comment, podId, cells, segment, accountCode) => {
+            await onAddCost(category, comment, podId, cells, segment, accountCode)
             setAddingCost(false)
           }}
         />
@@ -535,8 +542,8 @@ export function PodSection({
           pods={pods}
           editRow={editingCostRow}
           onClose={() => setEditingCostRow(null)}
-          onSave={async (category, comment, podId, cells) => {
-            await onEditCost(editingCostRow.id, category, comment, podId, cells)
+          onSave={async (category, comment, podId, cells, segment, accountCode) => {
+            await onEditCost(editingCostRow.id, category, comment, podId, cells, segment, accountCode)
             setEditingCostRow(null)
           }}
           onDelete={async () => {

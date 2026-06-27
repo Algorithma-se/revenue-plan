@@ -11,7 +11,7 @@ import type { Trend } from '@/lib/plan-utils'
 import type {
   Pod, ManualRevenueItem, PlanRevenueCell,
   CostItem, PlanCostCell,
-  RevenueRow, CostRow, PlanStatus,
+  RevenueRow, CostRow, PlanStatus, ItemSegment,
 } from '@/types/database'
 import { PodSection } from '@/components/plan/PodSection'
 import { SummarySection } from '@/components/plan/SummarySection'
@@ -146,6 +146,8 @@ export default function PlanPage() {
     project: string | null,
     notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
+    segment: ItemSegment = 'services',
+    accountCode: string | null = null,
   ) {
     // Count existing items in the same pod with the same client name
     let dupQ = supabase.from('manual_revenue_items').select('id', { count: 'exact', head: true })
@@ -158,7 +160,7 @@ export default function PlanPage() {
 
     const { data, error } = await supabase
       .from('manual_revenue_items')
-      .insert({ pod_id: podId, client_name: clientName, project, notes: finalNotes, sort: 0 })
+      .insert({ pod_id: podId, client_name: clientName, project, notes: finalNotes, sort: 0, segment, account_code: accountCode })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add item')
@@ -180,6 +182,8 @@ export default function PlanPage() {
     podId: string | null,
     notes: string | null,
     cells: { month: string; amount: number; status: PlanStatus }[],
+    segment: ItemSegment = 'services',
+    accountCode: string | null = null,
   ) {
     const { data: current } = await supabase
       .from('manual_revenue_items').select('pod_id').eq('id', itemId).single()
@@ -187,7 +191,7 @@ export default function PlanPage() {
 
     await supabase
       .from('manual_revenue_items')
-      .update({ client_name: clientName, project, pod_id: podId, notes })
+      .update({ client_name: clientName, project, pod_id: podId, notes, segment, account_code: accountCode })
       .eq('id', itemId)
     if (cells.length > 0) {
       // Upsert changed cells (preserves status for unchanged cells not sent from modal)
@@ -224,10 +228,12 @@ export default function PlanPage() {
     category: string,
     comment: string | null,
     cells: { month: string; amount: number }[],
+    segment: ItemSegment = 'services',
+    accountCode: string | null = null,
   ) {
     const { data, error } = await supabase
       .from('cost_items')
-      .insert({ pod_id: podId, category, comment, sort: Math.floor(Date.now() / 1000) })
+      .insert({ pod_id: podId, category, comment, sort: Math.floor(Date.now() / 1000), segment, account_code: accountCode })
       .select()
       .single()
     if (error || !data) throw new Error(error?.message ?? 'Failed to add cost item')
@@ -246,10 +252,12 @@ export default function PlanPage() {
     comment: string | null,
     podId: string | null,
     cells: { month: string; amount: number }[],
+    segment: ItemSegment = 'services',
+    accountCode: string | null = null,
   ) {
     await supabase
       .from('cost_items')
-      .update({ category, comment, pod_id: podId })
+      .update({ category, comment, pod_id: podId, segment, account_code: accountCode })
       .eq('id', itemId)
     await supabase.from('plan_cost_cells').delete().eq('cost_item_id', itemId)
     if (cells.length > 0) {
@@ -330,12 +338,26 @@ export default function PlanPage() {
     )
   }
 
-  const allRevenueRows: RevenueRow[] = state.pods.flatMap(pod =>
-    filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
-  )
-  const allCostRows: CostRow[] = state.pods.flatMap(pod =>
-    buildCostRows(pod, state.costItems, state.costCells, months)
-  )
+  const platformPod:    Pod = { id: '__platform__',   name: 'AOS Platform', sort: -1 }
+  const leadershipPod:  Pod = { id: '__leadership__', name: 'Leadership',   sort: 999 }
+
+  const platformRevRows    = filterFuture(buildRevenueRows(platformPod, state.manualItems, state.planRevCells, months, i => i.segment === 'platform'))
+  const platformCostRows   = buildCostRows(platformPod,   state.costItems, state.costCells, months, i => i.segment === 'platform')
+  const leadershipCostRows = buildCostRows(leadershipPod, state.costItems, state.costCells, months, i => i.segment === 'leadership')
+
+  const allRevenueRows: RevenueRow[] = [
+    ...platformRevRows,
+    ...state.pods.flatMap(pod =>
+      filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
+    ),
+  ]
+  const allCostRows: CostRow[] = [
+    ...platformCostRows,
+    ...state.pods.flatMap(pod =>
+      buildCostRows(pod, state.costItems, state.costCells, months)
+    ),
+    ...leadershipCostRows,
+  ]
 
   const today    = new Date()
   const curMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -451,31 +473,39 @@ export default function PlanPage() {
 
         {/* Mobile pods */}
         <div className="sm:hidden space-y-4">
-          {state.pods.map(pod => {
-            const isNoPod = pod.name === 'Other NoPod'
-            const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
-            const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
-            const mobileCommonProps = {
-              pod, pods: state.pods, months, revenueRows, costRows, mobileMonth, allPlanRevCells: state.planRevCells, clientTrends, sowDocItemIds: state.sowDocItemIds,
+          {(() => {
+            const mobileCallbacks = {
+              pods: state.pods, months, mobileMonth, allPlanRevCells: state.planRevCells, clientTrends, sowDocItemIds: state.sowDocItemIds,
               onSaveManualAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveManualCellAmount(itemId, month, status, amount),
               onSaveManualStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveManualCellStatus(itemId, month, amount, status),
               onSaveCostAmount: (itemId: string, month: string, status: import('@/types/database').PlanStatus, amount: number) => saveCostCellAmount(itemId, month, status, amount),
               onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) => saveCostCellStatus(itemId, month, amount, status),
-              onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => addManualItem(podId, client, project, notes, cells),
-              onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) => editManualItem(rowId, client, project, podId, notes, cells),
+              onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[], segment: ItemSegment, accountCode: string | null) => addManualItem(podId, client, project, notes, cells, segment, accountCode),
+              onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[], segment: ItemSegment, accountCode: string | null) => editManualItem(rowId, client, project, podId, notes, cells, segment, accountCode),
               onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
-              onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => addCostItem(podId, category, comment, cells),
-              onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => editCostItem(rowId, category, comment, podId, cells),
+              onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => addCostItem(podId, category, comment, cells, segment, accountCode),
+              onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => editCostItem(rowId, category, comment, podId, cells, segment, accountCode),
               onDeleteCost: (rowId: string) => deleteCostItem(rowId),
             }
-            if (isNoPod) return (
-              <div key={pod.id}>
-                <PodSection {...mobileCommonProps} isNoPod showOnly="revenue" />
-                <PodSection {...mobileCommonProps} isNoPod showOnly="costs" />
-              </div>
+            return (
+              <>
+                <PodSection {...mobileCallbacks} pod={platformPod} revenueRows={platformRevRows} costRows={platformCostRows} defaultSegment="platform" />
+                {state.pods.map(pod => {
+                  const isNoPod = pod.name === 'Other NoPod'
+                  const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
+                  const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
+                  if (isNoPod) return (
+                    <div key={pod.id}>
+                      <PodSection {...mobileCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} isNoPod showOnly="revenue" />
+                      <PodSection {...mobileCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} isNoPod showOnly="costs" />
+                    </div>
+                  )
+                  return <PodSection key={pod.id} {...mobileCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} />
+                })}
+                <PodSection {...mobileCallbacks} pod={leadershipPod} revenueRows={[]} costRows={leadershipCostRows} defaultSegment="leadership" showOnly="costs" />
+              </>
             )
-            return <PodSection key={pod.id} {...mobileCommonProps} />
-          })}
+          })()}
         </div>
 
         {/* Mobile summary card */}
@@ -523,18 +553,11 @@ export default function PlanPage() {
         <div className="hidden sm:block overflow-x-auto">
           <div style={{ minWidth: '1100px' }}>
 
-            {/* Pod sections */}
-            {state.pods.map(pod => {
-              const isNoPod = pod.name === 'Other NoPod'
-              const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
-              const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
-
-              const commonProps = {
-                pod,
+            {/* Shared callback props */}
+            {(() => {
+              const sharedCallbacks = {
                 pods: state.pods,
                 months,
-                revenueRows,
-                costRows,
                 allPlanRevCells: state.planRevCells,
                 clientTrends,
                 sowDocItemIds: state.sowDocItemIds,
@@ -546,29 +569,57 @@ export default function PlanPage() {
                   saveCostCellAmount(itemId, month, status, amount),
                 onSaveCostStatus: (itemId: string, month: string, amount: number, status: import('@/types/database').PlanStatus) =>
                   saveCostCellStatus(itemId, month, amount, status),
-                onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
-                  addManualItem(podId, client, project, notes, cells),
-                onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[]) =>
-                  editManualItem(rowId, client, project, podId, notes, cells),
+                onAddRevenue: (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[], segment: ItemSegment, accountCode: string | null) =>
+                  addManualItem(podId, client, project, notes, cells, segment, accountCode),
+                onEditRevenue: (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: import('@/types/database').PlanStatus }[], segment: ItemSegment, accountCode: string | null) =>
+                  editManualItem(rowId, client, project, podId, notes, cells, segment, accountCode),
                 onDeleteRevenue: (rowId: string) => deleteManualItem(rowId),
-                onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) =>
-                  addCostItem(podId, category, comment, cells),
-                onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) =>
-                  editCostItem(rowId, category, comment, podId, cells),
+                onAddCost: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) =>
+                  addCostItem(podId, category, comment, cells, segment, accountCode),
+                onEditCost: (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) =>
+                  editCostItem(rowId, category, comment, podId, cells, segment, accountCode),
                 onDeleteCost: (rowId: string) => deleteCostItem(rowId),
               }
 
-              if (isNoPod) {
-                return (
-                  <div key={pod.id}>
-                    <PodSection {...commonProps} isNoPod showOnly="revenue" />
-                    <PodSection {...commonProps} isNoPod showOnly="costs" />
-                  </div>
-                )
-              }
+              return (
+                <>
+                  {/* AOS Platform section */}
+                  <PodSection
+                    {...sharedCallbacks}
+                    pod={platformPod}
+                    revenueRows={platformRevRows}
+                    costRows={platformCostRows}
+                    defaultSegment="platform"
+                  />
 
-              return <PodSection key={pod.id} {...commonProps} />
-            })}
+                  {/* FDE pod sections */}
+                  {state.pods.map(pod => {
+                    const isNoPod = pod.name === 'Other NoPod'
+                    const revenueRows = filterFuture(buildRevenueRows(pod, state.manualItems, state.planRevCells, months))
+                    const costRows = buildCostRows(pod, state.costItems, state.costCells, months)
+                    if (isNoPod) {
+                      return (
+                        <div key={pod.id}>
+                          <PodSection {...sharedCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} isNoPod showOnly="revenue" />
+                          <PodSection {...sharedCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} isNoPod showOnly="costs" />
+                        </div>
+                      )
+                    }
+                    return <PodSection key={pod.id} {...sharedCallbacks} pod={pod} revenueRows={revenueRows} costRows={costRows} />
+                  })}
+
+                  {/* Leadership section */}
+                  <PodSection
+                    {...sharedCallbacks}
+                    pod={leadershipPod}
+                    revenueRows={[]}
+                    costRows={leadershipCostRows}
+                    defaultSegment="leadership"
+                    showOnly="costs"
+                  />
+                </>
+              )
+            })()}
 
             {/* Summary */}
             <SummarySection
