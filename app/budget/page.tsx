@@ -277,9 +277,9 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-[#BFDBFE] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-[#F3F4F6]">
+      <div className="flex items-center gap-3 px-5 py-3 bg-[#EFF6FF] border-b border-[#DBEAFE]">
         <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold text-white ${badgeClass}`}>
           {badge}
         </span>
@@ -287,12 +287,12 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
         {totalRev > 0 && (
           <div className="ml-auto flex items-center gap-4">
             <div className="text-right">
-              <p className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Revenue</p>
+              <p className="text-[10px] text-[#6B82A0] uppercase tracking-wider">Revenue</p>
               <p className="text-xs font-semibold text-[#374151] tabular-nums">{kFmt(totalRev)}</p>
             </div>
-            <div className="w-px h-6 bg-[#E5E7EB]" />
+            <div className="w-px h-6 bg-[#BFDBFE]" />
             <div className="text-right">
-              <p className="text-[10px] text-[#9CA3AF] uppercase tracking-widest">Margin</p>
+              <p className="text-[10px] text-[#6B82A0] uppercase tracking-wider">Margin</p>
               <p className={`text-xs font-semibold tabular-nums ${pctCls(totalMargin, totalRev)}`}>
                 {pctStr(totalMargin, totalRev)}
               </p>
@@ -304,20 +304,20 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-[#F9FAFB]">
+            <tr className="bg-[#EFF6FF]">
               <th className="pl-4 pr-1 py-2 text-left w-16">
-                <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">Code</span>
+                <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">Code</span>
               </th>
               <th className="px-2 py-2 text-left min-w-[160px]">
-                <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">Description</span>
+                <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">Description</span>
               </th>
               {months.map(m => (
                 <th key={m} className="px-1 py-2 text-right min-w-[52px]">
-                  <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">{monthLabel(m)}</span>
+                  <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">{monthLabel(m)}</span>
                 </th>
               ))}
               <th className="px-2 py-2 text-right min-w-[64px]">
-                <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">FY</span>
+                <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">FY</span>
               </th>
             </tr>
           </thead>
@@ -346,8 +346,8 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
             />
             {/* Budget margin row */}
             {revCodes.length > 0 && (revLines.length > 0 || costLines.length > 0) && (
-              <tr className="bg-[#F9FAFB] border-t border-[#E5E7EB]">
-                <td colSpan={2} className="pl-4 pr-2 py-2 text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">
+              <tr className="bg-[#EFF6FF] border-t border-[#DBEAFE]">
+                <td colSpan={2} className="pl-4 pr-2 py-2 text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">
                   {section === 'platform' ? 'Software Gross Margin' : 'Service Margin'}
                 </td>
                 {months.map(m => (
@@ -561,11 +561,11 @@ export default function BudgetPage() {
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <h1 className="text-xl font-bold text-[#0F0F0F]">Budget</h1>
         <div className="flex items-center gap-1 ml-1">
-          <button onClick={() => setFyStart(y => y - 1)} className="p-1 rounded text-[#9CA3AF] hover:text-[#374151] hover:bg-[#F3F4F6] transition-colors">
+          <button onClick={() => setFyStart(y => y - 1)} className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <span className="text-sm font-semibold text-[#374151] tabular-nums">{fyLabel(fyStart)}</span>
-          <button onClick={() => setFyStart(y => y + 1)} className="p-1 rounded text-[#9CA3AF] hover:text-[#374151] hover:bg-[#F3F4F6] transition-colors">
+          <span className="text-sm font-semibold text-[#0F0F0F] min-w-[72px] text-center tabular-nums">{fyLabel(fyStart)}</span>
+          <button onClick={() => setFyStart(y => y + 1)} className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-[#EFF6FF] border border-transparent hover:border-[#DBEAFE] transition-all">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
@@ -654,7 +654,7 @@ export default function BudgetPage() {
       )}
 
       {loading && activeId && (
-        <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="bg-white rounded-2xl border border-[#E5E7EB] h-40 animate-pulse" />)}</div>
+        <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="bg-[#EFF6FF] rounded-2xl border border-[#BFDBFE] h-40 animate-pulse" />)}</div>
       )}
 
       {!loading && activeId && (
@@ -701,22 +701,22 @@ export default function BudgetPage() {
 
           {/* Summary */}
           {lines.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-[#F3F4F6]">
+            <div className="bg-white rounded-2xl border border-[#BFDBFE] overflow-hidden">
+              <div className="px-5 py-3 bg-[#EFF6FF] border-b border-[#DBEAFE]">
                 <span className="text-sm font-semibold text-[#0F0F0F]">Summary</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-[#F9FAFB]">
+                    <tr className="bg-[#EFF6FF]">
                       <th className="pl-4 pr-1 py-2 w-16" /><th className="px-2 py-2 text-left min-w-[160px]" />
                       {months.map(m => (
                         <th key={m} className="px-1 py-2 text-right min-w-[52px]">
-                          <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">{monthLabel(m)}</span>
+                          <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">{monthLabel(m)}</span>
                         </th>
                       ))}
                       <th className="px-2 py-2 text-right min-w-[64px]">
-                        <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">FY</span>
+                        <span className="text-[10px] font-bold text-[#6B82A0] uppercase tracking-wider">FY</span>
                       </th>
                     </tr>
                   </thead>
@@ -734,7 +734,7 @@ export default function BudgetPage() {
                         <td className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums text-[#111827]">{kFmt(totals[key])}</td>
                       </tr>
                     ))}
-                    <tr className="bg-[#F9FAFB] border-t border-[#E5E7EB]">
+                    <tr className="bg-[#EFF6FF] border-t border-[#DBEAFE]">
                       <td colSpan={2} className="pl-4 pr-2 py-2 text-xs font-bold text-[#111827]">EBIT / OPM%</td>
                       {summary.map(r => (
                         <td key={r.m} className={`px-1 py-2 text-right text-xs font-semibold tabular-nums ${pctCls(r.ebit, r.totalRev)}`}>
