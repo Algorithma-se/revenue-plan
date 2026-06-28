@@ -204,10 +204,10 @@ export function PodSection({
         {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
-          <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
+          <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Revenue</span>
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
@@ -290,10 +290,10 @@ export function PodSection({
         {showOnly !== 'revenue' && <>
         <button
           onClick={toggleCosts}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-t border-[#C0E8F2] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-t border-[#F0F5F6] border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors"
         >
           <ChevronIcon open={costsOpen} />
-          <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Costs</span>
+          <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Costs</span>
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
@@ -399,9 +399,9 @@ export function PodSection({
 
             {/* Revenue section */}
             {showOnly !== 'costs' && <>
-              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors">
                 <ChevronIcon open={revenueOpen} />
-                <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
+                <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Revenue</span>
               </button>
               {revenueOpen && <>
                 {revenueRows.map((row, i) => {
@@ -439,9 +439,9 @@ export function PodSection({
 
             {/* Costs section */}
             {showOnly !== 'revenue' && <>
-              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-t border-[#C0E8F2] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
+              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-t border-[#F0F5F6] border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors">
                 <ChevronIcon open={costsOpen} />
-                <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Costs</span>
+                <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Costs</span>
               </button>
               {costsOpen && <>
                 {costRows.map((row, i) => {
