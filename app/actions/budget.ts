@@ -230,6 +230,66 @@ export async function getPodActuals(fyStart: number): Promise<PodActuals> {
   return result
 }
 
+// ─── Excel Import ─────────────────────────────────────────────────────────────
+
+export interface ImportRow {
+  segment:     'platform' | 'services' | 'leadership'
+  podId:       string | null
+  accountCode: string
+  lineType:    'revenue' | 'cost'
+  label:       string
+  amounts:     Record<string, number> // month (YYYY-MM-01) → kSEK value from Excel
+}
+
+export type ImportResult =
+  | { ok: true;  scenarioId: string; linesImported: number }
+  | { ok: false; error: string }
+
+export async function importBudgetScenario(
+  name:    string,
+  fyStart: number,
+  rows:    ImportRow[],
+): Promise<ImportResult> {
+  const supabase = await createAdminSupabase()
+
+  const { data: scenario, error: sErr } = await supabase
+    .from('budget_scenarios')
+    .insert({ name, fy_start: fyStart })
+    .select()
+    .single()
+  if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
+
+  const scenarioId = scenario.id
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const { data: line, error: lErr } = await supabase
+      .from('budget_lines')
+      .insert({
+        scenario_id:  scenarioId,
+        segment:      row.segment,
+        pod_id:       row.podId,
+        account_code: row.accountCode || (row.lineType === 'revenue' ? '3400' : '4400'),
+        line_type:    row.lineType,
+        label:        row.label,
+        sort:         i,
+      })
+      .select('id')
+      .single()
+    if (lErr || !line) continue
+
+    const cells = Object.entries(row.amounts)
+      .filter(([, v]) => v !== 0)
+      .map(([month, v]) => ({ budget_line_id: line.id, month, amount: Math.round(v * 1000) }))
+
+    if (cells.length > 0) {
+      await supabase.from('budget_cells').insert(cells)
+    }
+  }
+
+  return { ok: true, scenarioId, linesImported: rows.length }
+}
+
 // ─── Scenario Analysis (AI) ───────────────────────────────────────────────────
 
 export interface AnalysisSection {

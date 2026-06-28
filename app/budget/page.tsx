@@ -12,6 +12,7 @@ import {
   upsertBudgetCell, getPodActuals,
 } from '@/app/actions/budget'
 import type { BudgetScenario, BudgetLine, BudgetCells, PodActuals } from '@/app/actions/budget'
+import { ImportScenarioModal } from '@/components/budget/ImportScenarioModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -438,9 +439,10 @@ export default function BudgetPage() {
   const [activeId,   setActiveId]   = useState<string | null>(null)
   const [lines,      setLines]      = useState<BudgetLine[]>([])
   const [cells,      setCells]      = useState<BudgetCells>({})
-  const [loading,    setLoading]    = useState(true)
-  const [creating,   setCreating]   = useState(false)
-  const [newName,    setNewName]    = useState('')
+  const [loading,      setLoading]      = useState(true)
+  const [creating,     setCreating]     = useState(false)
+  const [newName,      setNewName]      = useState('')
+  const [importOpen,   setImportOpen]   = useState(false)
   const [renameId,   setRenameId]   = useState<string | null>(null)
   const [renameName, setRenameName] = useState('')
   const [dropOpen,   setDropOpen]   = useState(false)
@@ -638,10 +640,19 @@ export default function BudgetPage() {
             <button onClick={() => { setCreating(false); setNewName('') }} className="px-3 py-1.5 rounded-lg text-[#6B7280] text-sm hover:bg-[#F3F4F6] transition-colors">Cancel</button>
           </div>
         ) : (
-          <button onClick={() => setCreating(true)}
-            className="px-3 py-1.5 rounded-lg border border-dashed border-[#D1D5DB] text-sm text-[#6B7280] hover:border-[#9CA3AF] hover:text-[#374151] hover:bg-[#F9FAFB] transition-colors">
-            + New scenario
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCreating(true)}
+              className="px-3 py-1.5 rounded-lg border border-dashed border-[#D1D5DB] text-sm text-[#6B7280] hover:border-[#9CA3AF] hover:text-[#374151] hover:bg-[#F9FAFB] transition-colors">
+              + New scenario
+            </button>
+            <button onClick={() => setImportOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-sm text-[#6B7280] hover:border-[#9CA3AF] hover:text-[#374151] hover:bg-[#F9FAFB] transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12" />
+              </svg>
+              Import
+            </button>
+          </div>
         )}
       </div>
 
@@ -754,6 +765,18 @@ export default function BudgetPage() {
           )}
         </div>
       )}
+
+      <ImportScenarioModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        fyStart={fyStart}
+        pods={pods}
+        onImported={async scenarioId => {
+          setImportOpen(false)
+          await loadScenarios()
+          setActiveId(scenarioId)
+        }}
+      />
     </div>
   )
 }
