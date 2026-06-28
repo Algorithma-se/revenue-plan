@@ -184,7 +184,7 @@ export function PodSection({
       <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
 
         {/* ── Pod header ─────────────────────────────────────────────────────── */}
-        <div className="grid bg-[#EBF8FA] border-b border-[#C0E8F2]" style={CS}>
+        <div className="grid bg-[#CEEDF5] border-b border-[#A8DCE9]" style={CS}>
           <div className="px-4 py-2.5 flex items-center gap-2 min-w-0">
             <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
             <span className="text-sm font-bold text-[#0F0F0F] tracking-wide truncate">{podHeaderLabel}</span>
@@ -204,7 +204,7 @@ export function PodSection({
         {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#CEEDF5] border-b border-[#A8DCE9] hover:bg-[#D9F3F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
           <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
@@ -392,14 +392,14 @@ export function PodSection({
         return (
           <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
             {/* Pod header */}
-            <div className="px-4 py-2.5 bg-[#EBF8FA] border-b border-[#C0E8F2] flex items-center gap-2">
+            <div className="px-4 py-2.5 bg-[#CEEDF5] border-b border-[#A8DCE9] flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
               <span className="text-sm font-bold text-[#0F0F0F] tracking-wide truncate">{podHeaderLabel}</span>
             </div>
 
             {/* Revenue section */}
             {showOnly !== 'costs' && <>
-              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#CEEDF5] border-b border-[#A8DCE9] hover:bg-[#D9F3F9] transition-colors">
                 <ChevronIcon open={revenueOpen} />
                 <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
               </button>
