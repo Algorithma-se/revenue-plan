@@ -588,29 +588,50 @@ export async function createAdjustedScenario(
   sourceScenarioId: string,
   fyStart:          number,
   name:             string,
-  adjustments:      ScenarioAdjustment[],
 ): Promise<CreateAdjustedResult> {
   const supabase = await createAdminSupabase()
 
   // Build lookup by key and by name (AI may echo name instead of UUID key)
-  const adjByKey:  Record<string, number> = {}
-  const adjByName: Record<string, number> = {}
-  for (const a of adjustments) {
-    adjByKey[`${a.key}:${a.lineType}`]              = a.pct
-    adjByName[`${a.name.toLowerCase()}:${a.lineType}`] = a.pct
-  }
-
-  // Load source lines + cells and pod names
+  // Load source lines + cells and YTD actuals
   const { lines, cells } = await getBudgetData(sourceScenarioId)
-  const { data: podRows } = await supabase.from('pods').select('id, name')
-  const podNameById: Record<string, string> = {}
-  for (const p of podRows ?? []) podNameById[p.id] = p.name
+  const actuals = await getPodActuals(fyStart)
 
-  // Remaining months = after current month
   const allMonths = getFiscalMonths(fyStart)
   const today     = new Date()
   const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const ytdMonths = allMonths.filter(m => m <= todayStr)
   const remaining = new Set(allMonths.filter(m => m > todayStr))
+
+  // Aggregate YTD actuals and budget per podKey + lineType
+  const ytdActualRev:  Record<string, number> = {}
+  const ytdActualCost: Record<string, number> = {}
+  const ytdBudgRev:    Record<string, number> = {}
+  const ytdBudgCost:   Record<string, number> = {}
+
+  for (const [podKey, monthData] of Object.entries(actuals)) {
+    for (const m of ytdMonths) {
+      const a = monthData[m]
+      if (a) {
+        ytdActualRev[podKey]  = (ytdActualRev[podKey]  ?? 0) + a.revA + a.revB
+        ytdActualCost[podKey] = (ytdActualCost[podKey] ?? 0) + a.costA + a.costB
+      }
+    }
+  }
+  for (const line of lines) {
+    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    const lineCells = cells[line.id] ?? {}
+    for (const m of ytdMonths) {
+      const amt = lineCells[m] ?? 0
+      if (line.line_type === 'revenue') ytdBudgRev[pk]  = (ytdBudgRev[pk]  ?? 0) + amt
+      else                              ytdBudgCost[pk] = (ytdBudgCost[pk] ?? 0) + amt
+    }
+  }
+
+  // Run-rate ratio: actual ÷ budget, capped 5%–300% to avoid wild extrapolation
+  function runRate(actual: number, budget: number): number {
+    if (budget <= 0) return 1
+    return Math.max(0.05, Math.min(3.0, actual / budget))
+  }
 
   // Create new scenario
   const { data: scenario, error: sErr } = await supabase
@@ -621,14 +642,11 @@ export async function createAdjustedScenario(
   if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
 
   for (let i = 0; i < lines.length; i++) {
-    const line    = lines[i]
-    const podKey  = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    const podName = line.segment === 'services'
-      ? (line.pod_id ? (podNameById[line.pod_id] ?? '').toLowerCase() : '')
-      : line.segment
-    const pct = adjByKey[`${podKey}:${line.line_type}`]
-      ?? adjByName[`${podName}:${line.line_type}`]
-      ?? 0
+    const line   = lines[i]
+    const podKey = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    const ratio  = line.line_type === 'revenue'
+      ? runRate(ytdActualRev[podKey] ?? 0, ytdBudgRev[podKey] ?? 0)
+      : runRate(ytdActualCost[podKey] ?? 0, ytdBudgCost[podKey] ?? 0)
 
     const { data: newLine, error: lErr } = await supabase
       .from('budget_lines')
@@ -647,12 +665,13 @@ export async function createAdjustedScenario(
 
     const sourceCells = cells[line.id] ?? {}
     const newCells = allMonths
+      .filter(m => (sourceCells[m] ?? 0) !== 0 || remaining.has(m))
       .filter(m => (sourceCells[m] ?? 0) !== 0)
       .map(m => ({
         budget_line_id: newLine.id,
         month:          m,
-        amount: remaining.has(m) && pct !== 0
-          ? Math.round((sourceCells[m] ?? 0) * (1 + pct / 100))
+        amount: remaining.has(m)
+          ? Math.round((sourceCells[m] ?? 0) * ratio)
           : (sourceCells[m] ?? 0),
       }))
 
