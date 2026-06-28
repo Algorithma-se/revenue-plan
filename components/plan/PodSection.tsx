@@ -183,21 +183,26 @@ export function PodSection({
     <>
       <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
 
-        {/* ── Pod header ─────────────────────────────────────────────────────── */}
-        <div className="grid bg-[#CEEDF5] border-b border-[#A8DCE9]" style={CS}>
-          <div className="px-4 py-2.5 flex items-center gap-2 min-w-0">
-            <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
-            <span className="text-sm font-bold text-[#0F0F0F] tracking-wide truncate">{podHeaderLabel}</span>
+        {/* ── Pod title row ───────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-[#EBF8FA]">
+          <div className="w-7 h-7 rounded-full bg-[#61b5cc] flex items-center justify-center flex-shrink-0">
+            <span className="text-[11px] font-bold text-white">{podHeaderLabel[0]}</span>
           </div>
+          <span className="text-sm font-bold text-[#0F0F0F] tracking-tight truncate">{podHeaderLabel}</span>
+        </div>
+
+        {/* ── Column header row ───────────────────────────────────────────────── */}
+        <div className="grid bg-[#CEEDF5] border-b border-[#A8DCE9]" style={CS}>
+          <div className="px-4 py-1.5" />
           {months.map((m, i) => (
-            <div key={m} className={`px-1 py-2 text-center flex flex-col items-center justify-center gap-0.5 ${i === curMonthIdx ? 'bg-[#61b5cc]/10' : ''}`}>
+            <div key={m} className={`px-1 py-1.5 text-center flex flex-col items-center justify-center gap-0.5 ${i === curMonthIdx ? 'bg-[#61b5cc]/10' : ''}`}>
               {i === curMonthIdx && <div className="w-1 h-1 rounded-full bg-[#61b5cc]" />}
               <span className={`text-[10px] font-semibold uppercase tracking-wider ${i === curMonthIdx ? 'text-[#5191A4]' : 'text-[#5191A4]/50'}`}>
                 {monthLabel(m)}
               </span>
             </div>
           ))}
-          <div className="px-1 py-2.5 text-center text-[10px] font-semibold text-[#5191A4]/50 uppercase tracking-wider">FY</div>
+          <div className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#5191A4]/50 uppercase tracking-wider">FY</div>
         </div>
 
         {/* ── Revenue section ────────────────────────────────────────────────── */}
@@ -392,9 +397,11 @@ export function PodSection({
         return (
           <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
             {/* Pod header */}
-            <div className="px-4 py-2.5 bg-[#CEEDF5] border-b border-[#A8DCE9] flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
-              <span className="text-sm font-bold text-[#0F0F0F] tracking-wide truncate">{podHeaderLabel}</span>
+            <div className="px-4 py-3 bg-white border-b border-[#EBF8FA] flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-[#61b5cc] flex items-center justify-center flex-shrink-0">
+                <span className="text-[11px] font-bold text-white">{podHeaderLabel[0]}</span>
+              </div>
+              <span className="text-sm font-bold text-[#0F0F0F] tracking-tight truncate">{podHeaderLabel}</span>
             </div>
 
             {/* Revenue section */}
