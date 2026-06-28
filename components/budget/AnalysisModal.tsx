@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  getBudgetScenarios, getScenarioAnalysis, runScenarioAnalysis,
+  getBudgetScenarios, getScenarioAnalysis, runScenarioAnalysis, createAdjustedScenario,
 } from '@/app/actions/budget'
 import type { BudgetScenario, ScenarioAnalysis, AnalysisSection, AnalysisResult } from '@/app/actions/budget'
 import { fyLabel } from '@/lib/plan-utils'
@@ -41,6 +41,10 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
   const [loadingCheck,    setLoadingCheck]    = useState(false)
   const [running,         setRunning]         = useState(false)
   const [error,           setError]           = useState<string | null>(null)
+  const [creatingScenario, setCreatingScenario] = useState(false)
+  const [newScenarioName,  setNewScenarioName]  = useState('')
+  const [createError,      setCreateError]      = useState<string | null>(null)
+  const [createSuccess,    setCreateSuccess]    = useState(false)
 
   // Load scenarios on open
   useEffect(() => {
@@ -269,19 +273,117 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
               </ol>
             </div>
 
-            {/* Scenario adjustments */}
-            {analysis.adjustments.length > 0 && (
+            {/* Scenario adjustments + create scenario */}
+            {(analysis.adjustments.length > 0 || analysis.scenarioAdjustments?.length > 0) && (
               <div className="bg-white rounded-2xl border border-[#EBEBEB] shadow-sm px-6 py-5">
                 <h3 className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-4">Scenario adjustments</h3>
-                <ul className="space-y-3">
-                  {analysis.adjustments.map((a, i) => (
-                    <li key={i} className="text-sm text-[#374151]">
-                      <span className="font-medium text-[#0F0F0F]">{a.section}</span>
-                      {' — '}
-                      {a.suggestion}
-                    </li>
-                  ))}
-                </ul>
+
+                {/* Text suggestions */}
+                {analysis.adjustments.length > 0 && (
+                  <ul className="space-y-2 mb-5">
+                    {analysis.adjustments.map((a, i) => (
+                      <li key={i} className="text-sm text-[#374151]">
+                        <span className="font-medium text-[#0F0F0F]">{a.section}</span>
+                        {' — '}
+                        {a.suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Numeric adjustments table */}
+                {analysis.scenarioAdjustments?.length > 0 && (
+                  <>
+                    <div className="border border-[#F3F4F6] rounded-xl overflow-hidden mb-5">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-[#F9FAFB] text-[#6B7280]">
+                            <th className="text-left px-4 py-2 font-medium">Section</th>
+                            <th className="text-left px-4 py-2 font-medium">Type</th>
+                            <th className="text-right px-4 py-2 font-medium">Adjustment</th>
+                            <th className="text-left px-4 py-2 font-medium">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#F9FAFB]">
+                          {analysis.scenarioAdjustments.map((a, i) => (
+                            <tr key={i} className="hover:bg-[#F9FAFB]">
+                              <td className="px-4 py-2.5 font-medium text-[#0F0F0F]">{a.name}</td>
+                              <td className="px-4 py-2.5 text-[#6B7280] capitalize">{a.lineType}</td>
+                              <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${a.pct > 0 ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>
+                                {a.pct > 0 ? `+${a.pct}%` : `${a.pct}%`}
+                              </td>
+                              <td className="px-4 py-2.5 text-[#6B7280]">{a.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Create adjusted scenario */}
+                    {createSuccess ? (
+                      <div className="flex items-center gap-2 text-sm text-[#16A34A]">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                        Scenario created — switch to it in the Budget page
+                      </div>
+                    ) : creatingScenario ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          value={newScenarioName}
+                          onChange={e => setNewScenarioName(e.target.value)}
+                          onKeyDown={async e => {
+                            if (e.key === 'Enter' && newScenarioName.trim() && selectedId) {
+                              setCreateError(null)
+                              const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim())
+                              if (r.ok) { setCreateSuccess(true); setCreatingScenario(false) }
+                              else setCreateError(r.error)
+                            }
+                            if (e.key === 'Escape') { setCreatingScenario(false); setNewScenarioName('') }
+                          }}
+                          placeholder="Name for adjusted scenario…"
+                          className="flex-1 text-sm border border-[#E5E7EB] rounded-lg px-3 py-1.5 outline-none focus:border-[#61b5cc] focus:ring-1 focus:ring-[#61b5cc]"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (!newScenarioName.trim() || !selectedId) return
+                            setCreateError(null)
+                            const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim())
+                            if (r.ok) { setCreateSuccess(true); setCreatingScenario(false) }
+                            else setCreateError(r.error)
+                          }}
+                          disabled={!newScenarioName.trim()}
+                          className="px-3 py-1.5 rounded-lg bg-[#61b5cc] text-white text-sm font-medium hover:bg-[#4fa3bb] disabled:opacity-40 transition-colors"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => { setCreatingScenario(false); setNewScenarioName(''); setCreateError(null) }}
+                          className="px-3 py-1.5 rounded-lg text-sm text-[#6B7280] hover:bg-[#F3F4F6] transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const src = scenarios.find(s => s.id === selectedId)
+                          setNewScenarioName(src ? `${src.name} — Adjusted` : 'Adjusted scenario')
+                          setCreatingScenario(true)
+                          setCreateSuccess(false)
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#EBF8FA] border border-[#9ED3E3] text-sm font-medium text-[#3B8FA3] hover:bg-[#D9F3F9] transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create adjusted scenario
+                      </button>
+                    )}
+                    {createError && (
+                      <p className="mt-2 text-xs text-[#DC2626]">{createError}</p>
+                    )}
+                  </>
+                )}
               </div>
             )}
 

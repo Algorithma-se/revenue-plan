@@ -302,12 +302,21 @@ export interface AnalysisSection {
   narrative:  string
 }
 
+export interface ScenarioAdjustment {
+  key:      string              // podKey — matches budget line key scheme
+  name:     string
+  lineType: 'revenue' | 'cost'
+  pct:      number              // % change for remaining FY months, e.g. -20
+  reason:   string
+}
+
 export interface ScenarioAnalysis {
-  headline:    string
-  sections:    AnalysisSection[]
-  actions:     string[]
-  adjustments: { section: string; suggestion: string }[]
-  generatedAt: string
+  headline:            string
+  sections:            AnalysisSection[]
+  actions:             string[]
+  adjustments:         { section: string; suggestion: string }[]
+  scenarioAdjustments: ScenarioAdjustment[]
+  generatedAt:         string
 }
 
 // In Next.js 16, expected errors must be returned as values, not thrown.
@@ -324,17 +333,18 @@ export async function getScenarioAnalysis(
     const supabase = await createAdminSupabase()
     const { data } = await supabase
       .from('scenario_analyses')
-      .select('headline, sections, actions, adjustments, generated_at')
+      .select('headline, sections, actions, adjustments, scenario_adjustments, generated_at')
       .eq('scenario_id', scenarioId)
       .eq('fy_start', fyStart)
       .maybeSingle()
     if (!data) return null
     return {
-      headline:    data.headline,
-      sections:    data.sections,
-      actions:     data.actions,
-      adjustments: data.adjustments,
-      generatedAt: data.generated_at,
+      headline:            data.headline,
+      sections:            data.sections,
+      actions:             data.actions,
+      adjustments:         data.adjustments,
+      scenarioAdjustments: data.scenario_adjustments ?? [],
+      generatedAt:         data.generated_at,
     }
   } catch {
     return null
@@ -453,10 +463,13 @@ export async function runScenarioAnalysis(
     `  [${s.key}] ${s.name}: budget rev ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK | budget cost ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK`
   ).join('\n')
 
+  const remainingMonths = allMonths.filter(m => m > todayStr)
+
   const prompt = `You are Allie, CFO assistant for Algorithma (Swedish tech firm).
 
 Analyse YTD performance vs the "${scenarioName}" budget scenario for ${fyLabel}.
 YTD months covered: ${ytdMonths.length} (${ytdMonths[0].slice(0, 7)} to ${ytdMonths[ytdMonths.length - 1].slice(0, 7)}).
+Remaining FY months: ${remainingMonths.length}.
 All amounts in kSEK (thousands SEK).
 
 Section breakdown (YTD) — each line shows [key] name: numbers:
@@ -474,12 +487,16 @@ Respond with ONLY valid JSON matching this exact schema — no markdown, no extr
   "actions": ["action 1", "action 2", "action 3"],
   "adjustments": [
     { "section": "<section name>", "suggestion": "specific budget adjustment for remaining months" }
+  ],
+  "scenarioAdjustments": [
+    { "key": "<copy key from brackets above>", "name": "<section name>", "lineType": "revenue or cost", "pct": <integer -80 to 80>, "reason": "one sentence" }
   ]
 }
 
-Include one sections entry per section above. Copy the key exactly from the brackets.
+Include one sections entry per section above. Copy keys exactly from the brackets.
 actions: top 3 recommended actions, direct and specific.
-adjustments: one entry per section where an adjustment is warranted.
+adjustments: text suggestions, one per section where warranted.
+scenarioAdjustments: numeric adjustments to apply to remaining ${remainingMonths.length} months when creating a revised scenario. Only include where performance clearly warrants a change. pct is the % to adjust the remaining months budget (negative = reduce, positive = increase).
 Be honest and direct. No fluff.`
 
   const client = new Anthropic({ apiKey })
@@ -492,7 +509,13 @@ Be honest and direct. No fluff.`
   const block = message.content[0]
   if (block.type !== 'text') return { ok: false, error: 'Unexpected AI response type' }
 
-  let aiResponse: { headline: string; sections: { key: string; name: string; narrative: string }[]; actions: string[]; adjustments: { section: string; suggestion: string }[] }
+  let aiResponse: {
+    headline:            string
+    sections:            { key: string; name: string; narrative: string }[]
+    actions:             string[]
+    adjustments:         { section: string; suggestion: string }[]
+    scenarioAdjustments: { key: string; name: string; lineType: string; pct: number; reason: string }[]
+  }
   try {
     aiResponse = JSON.parse(extractJson(block.text))
   } catch {
@@ -515,11 +538,22 @@ Be honest and direct. No fluff.`
     }
   })
 
+  const scenarioAdjustments: ScenarioAdjustment[] = (aiResponse.scenarioAdjustments ?? [])
+    .filter(a => typeof a.pct === 'number' && (a.lineType === 'revenue' || a.lineType === 'cost'))
+    .map(a => ({
+      key:      a.key,
+      name:     a.name,
+      lineType: a.lineType as 'revenue' | 'cost',
+      pct:      Math.max(-80, Math.min(80, Math.round(a.pct))),
+      reason:   a.reason ?? '',
+    }))
+
   const parsed: Omit<ScenarioAnalysis, 'generatedAt'> = {
-    headline:    aiResponse.headline,
-    sections:    mergedSections,
-    actions:     aiResponse.actions,
-    adjustments: aiResponse.adjustments,
+    headline:            aiResponse.headline,
+    sections:            mergedSections,
+    actions:             aiResponse.actions,
+    adjustments:         aiResponse.adjustments,
+    scenarioAdjustments,
   }
 
   const generatedAt = new Date().toISOString()
@@ -528,13 +562,14 @@ Be honest and direct. No fluff.`
     .from('scenario_analyses')
     .upsert(
       {
-        scenario_id:  scenarioId,
-        fy_start:     fyStart,
-        headline:     parsed.headline,
-        sections:     parsed.sections,
-        actions:      parsed.actions,
-        adjustments:  parsed.adjustments,
-        generated_at: generatedAt,
+        scenario_id:          scenarioId,
+        fy_start:             fyStart,
+        headline:             parsed.headline,
+        sections:             parsed.sections,
+        actions:              parsed.actions,
+        adjustments:          parsed.adjustments,
+        scenario_adjustments: parsed.scenarioAdjustments,
+        generated_at:         generatedAt,
       },
       { onConflict: 'scenario_id,fy_start' },
     )
@@ -543,4 +578,81 @@ Be honest and direct. No fluff.`
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Analysis failed' }
   }
+}
+
+export type CreateAdjustedResult =
+  | { ok: true;  scenarioId: string }
+  | { ok: false; error: string }
+
+export async function createAdjustedScenario(
+  sourceScenarioId: string,
+  fyStart:          number,
+  name:             string,
+): Promise<CreateAdjustedResult> {
+  const supabase = await createAdminSupabase()
+
+  // Load numeric adjustments from stored analysis
+  const { data: stored } = await supabase
+    .from('scenario_analyses')
+    .select('scenario_adjustments')
+    .eq('scenario_id', sourceScenarioId)
+    .eq('fy_start', fyStart)
+    .maybeSingle()
+
+  const adjList: ScenarioAdjustment[] = stored?.scenario_adjustments ?? []
+  const adjMap: Record<string, number> = {}
+  for (const a of adjList) adjMap[`${a.key}:${a.lineType}`] = a.pct
+
+  // Load source lines + cells
+  const { lines, cells } = await getBudgetData(sourceScenarioId)
+
+  // Remaining months = after current month
+  const allMonths = getFiscalMonths(fyStart)
+  const today     = new Date()
+  const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const remaining = new Set(allMonths.filter(m => m > todayStr))
+
+  // Create new scenario
+  const { data: scenario, error: sErr } = await supabase
+    .from('budget_scenarios')
+    .insert({ name, fy_start: fyStart })
+    .select()
+    .single()
+  if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line   = lines[i]
+    const podKey = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    const pct    = adjMap[`${podKey}:${line.line_type}`] ?? 0
+
+    const { data: newLine, error: lErr } = await supabase
+      .from('budget_lines')
+      .insert({
+        scenario_id:  scenario.id,
+        segment:      line.segment,
+        pod_id:       line.pod_id,
+        account_code: line.account_code,
+        line_type:    line.line_type,
+        label:        line.label,
+        sort:         line.sort,
+      })
+      .select('id')
+      .single()
+    if (lErr || !newLine) continue
+
+    const sourceCells = cells[line.id] ?? {}
+    const newCells = allMonths
+      .filter(m => (sourceCells[m] ?? 0) !== 0)
+      .map(m => ({
+        budget_line_id: newLine.id,
+        month:          m,
+        amount: remaining.has(m) && pct !== 0
+          ? Math.round((sourceCells[m] ?? 0) * (1 + pct / 100))
+          : (sourceCells[m] ?? 0),
+      }))
+
+    if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
+  }
+
+  return { ok: true, scenarioId: scenario.id }
 }
