@@ -640,42 +640,17 @@ export async function createAdjustedScenario(
   }
 
   const { lines, cells } = await getBudgetData(sourceScenarioId)
+  const actuals          = await getPodActuals(fyStart)
   const { data: podRows } = await supabase.from('pods').select('id, name')
   const podNameById: Record<string, string> = {}
   for (const p of podRows ?? []) podNameById[p.id] = p.name.toLowerCase()
 
-  const allMonths = getFiscalMonths(fyStart)
-  const today     = new Date()
-  const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const ytdMonths = new Set(allMonths.filter(m => m <= todayStr))
-
-  // YTD run-rate ratio per pod+lineType so past months reflect actuals proportionally
-  const actuals = await getPodActuals(fyStart)
-  const ytdActualRev:  Record<string, number> = {}
-  const ytdActualCost: Record<string, number> = {}
-  const ytdBudgRev:    Record<string, number> = {}
-  const ytdBudgCost:   Record<string, number> = {}
-  for (const [pk, monthData] of Object.entries(actuals)) {
-    for (const m of ytdMonths) {
-      const a = monthData[m]
-      if (a) {
-        ytdActualRev[pk]  = (ytdActualRev[pk]  ?? 0) + a.revA + a.revB
-        ytdActualCost[pk] = (ytdActualCost[pk] ?? 0) + a.costA + a.costB
-      }
-    }
-  }
-  for (const line of lines) {
-    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    for (const m of ytdMonths) {
-      const amt = cells[line.id]?.[m] ?? 0
-      if (line.line_type === 'revenue') ytdBudgRev[pk]  = (ytdBudgRev[pk]  ?? 0) + amt
-      else                              ytdBudgCost[pk] = (ytdBudgCost[pk] ?? 0) + amt
-    }
-  }
-  function ytdRatio(actual: number, budget: number): number {
-    if (budget <= 0) return 1
-    return Math.max(0.05, Math.min(5.0, actual / budget))
-  }
+  const allMonths    = getFiscalMonths(fyStart)
+  const today        = new Date()
+  const todayStr     = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const ytdSet       = new Set(allMonths.filter(m => m <= todayStr))
+  const ytdArr       = allMonths.filter(m => ytdSet.has(m))
+  const remainingArr = allMonths.filter(m => !ytdSet.has(m))
 
   const { data: scenario, error: sErr } = await supabase
     .from('budget_scenarios')
@@ -684,21 +659,17 @@ export async function createAdjustedScenario(
     .single()
   if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line    = lines[i]
+  // ── Step 1: Original budget lines — future months only, zeroing past ─────────
+  // Past months are covered by exact "Actuals" lines below, so we zero them here
+  // to avoid double-counting. Future months get Allie's pct applied.
+  for (const line of lines) {
     const podKey  = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
     const podName = line.segment === 'services'
       ? (line.pod_id ? (podNameById[line.pod_id] ?? '') : '')
       : line.segment
-
-    // Past months: scale by YTD run rate so pod totals match actuals
-    // Future months: apply Allie's reasoned pct
-    const futurePct  = adjByKey[`${podKey}:${line.line_type}`]
+    const futurePct = adjByKey[`${podKey}:${line.line_type}`]
       ?? adjByName[`${podName}:${line.line_type}`]
       ?? 0
-    const pastRatio  = line.line_type === 'revenue'
-      ? ytdRatio(ytdActualRev[podKey] ?? 0, ytdBudgRev[podKey] ?? 0)
-      : ytdRatio(ytdActualCost[podKey] ?? 0, ytdBudgCost[podKey] ?? 0)
 
     const { data: newLine, error: lErr } = await supabase
       .from('budget_lines')
@@ -716,66 +687,42 @@ export async function createAdjustedScenario(
     if (lErr || !newLine) continue
 
     const sourceCells = cells[line.id] ?? {}
-    const newCells = allMonths
+    const futureCells = remainingArr
       .filter(m => (sourceCells[m] ?? 0) !== 0)
       .map(m => ({
         budget_line_id: newLine.id,
         month:          m,
-        amount: ytdMonths.has(m)
-          ? Math.round((sourceCells[m] ?? 0) * pastRatio)
-          : futurePct !== 0
-            ? Math.round((sourceCells[m] ?? 0) * (1 + futurePct / 100))
-            : (sourceCells[m] ?? 0),
+        amount:         futurePct !== 0
+          ? Math.round((sourceCells[m] ?? 0) * (1 + futurePct / 100))
+          : (sourceCells[m] ?? 0),
       }))
 
-    if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
+    if (futureCells.length > 0) await supabase.from('budget_cells').insert(futureCells)
   }
 
-  // ── Synthetic lines for actuals with no budget counterpart ───────────────────
-  // Track which pod+lineType combinations already have budget lines
-  const coveredKeys = new Set<string>()
-  for (const line of lines) {
-    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    coveredKeys.add(`${pk}:${line.line_type}`)
-  }
-
-  const ytdArr = [...ytdMonths]
-  const remainingArr = allMonths.filter(m => !ytdMonths.has(m))
-
+  // ── Step 2: One "Actuals" line per pod+lineType — exact P&L amounts for YTD ──
+  // Covers ALL pods that have actuals, including those with no budget lines.
   for (const [podKey, monthData] of Object.entries(actuals)) {
-    // Resolve segment + pod_id from podKey
     let segment: 'platform' | 'services' | 'leadership'
     let pod_id: string | null = null
     let podDisplayName: string
 
-    if (podKey === '__platform__') {
-      segment = 'platform'; podDisplayName = 'AOS Platform'
-    } else if (podKey === '__leadership__') {
-      segment = 'leadership'; podDisplayName = 'Leadership'
-    } else {
+    if      (podKey === '__platform__')   { segment = 'platform';   podDisplayName = 'AOS Platform' }
+    else if (podKey === '__leadership__') { segment = 'leadership'; podDisplayName = 'Leadership' }
+    else {
       segment = 'services'; pod_id = podKey
-      podDisplayName = Object.entries(podNameById).find(([id]) => id === podKey)?.[1] ?? podKey
+      podDisplayName = podNameById[podKey] ?? podKey
     }
-
     const podNameLower = podDisplayName.toLowerCase()
 
     for (const lineType of ['revenue', 'cost'] as const) {
-      if (coveredKeys.has(`${podKey}:${lineType}`)) continue
-
-      // Check if there are any actuals for this pod+lineType
       const ytdTotal = ytdArr.reduce((s, m) => {
         const a = monthData[m]
         return s + (a ? (lineType === 'revenue' ? a.revA + a.revB : a.costA + a.costB) : 0)
       }, 0)
       if (ytdTotal === 0) continue
 
-      // Average monthly actual → project into remaining months
-      const avgMonthly = ytdArr.length > 0 ? Math.round(ytdTotal / ytdArr.length) : 0
-      const futurePct  = adjByKey[`${podKey}:${lineType}`]
-        ?? adjByName[`${podNameLower}:${lineType}`]
-        ?? 0
-
-      const { data: newLine, error: lErr } = await supabase
+      const { data: actLine, error: aErr } = await supabase
         .from('budget_lines')
         .insert({
           scenario_id:  scenario.id,
@@ -783,31 +730,40 @@ export async function createAdjustedScenario(
           pod_id,
           account_code: 'actual',
           line_type:    lineType,
-          label:        lineType === 'revenue' ? 'Revenue (from actuals)' : 'Costs (from actuals)',
-          sort:         999,
+          label:        lineType === 'revenue' ? 'Revenue (actuals)' : 'Costs (actuals)',
+          sort:         998,
         })
         .select('id')
         .single()
-      if (lErr || !newLine) continue
+      if (aErr || !actLine) continue
 
-      const newCells = [
-        // YTD months: use actual amounts directly
-        ...ytdArr.map(m => {
-          const a = monthData[m]
-          const amount = a ? (lineType === 'revenue' ? a.revA + a.revB : a.costA + a.costB) : 0
-          return { budget_line_id: newLine.id, month: m, amount }
-        }).filter(c => c.amount !== 0),
-        // Remaining months: project from avg monthly + Allie's pct
-        ...remainingArr.map(m => ({
-          budget_line_id: newLine.id,
+      // YTD: exact actual per month
+      const ytdCells = ytdArr.map(m => {
+        const a = monthData[m]
+        return {
+          budget_line_id: actLine.id,
           month:          m,
-          amount:         futurePct !== 0
-            ? Math.round(avgMonthly * (1 + futurePct / 100))
-            : avgMonthly,
-        })).filter(c => c.amount !== 0),
-      ]
+          amount:         a ? (lineType === 'revenue' ? a.revA + a.revB : a.costA + a.costB) : 0,
+        }
+      }).filter(c => c.amount !== 0)
 
-      if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
+      // Remaining months (only for pods with NO budget lines — budget lines cover the rest)
+      const hasBudgetLines = lines.some(l => {
+        const pk = l.segment === 'services' ? (l.pod_id ?? '__no_pod__') : `__${l.segment}__`
+        return pk === podKey && l.line_type === lineType
+      })
+      const avgMonthly = ytdArr.length > 0 ? Math.round(ytdTotal / ytdArr.length) : 0
+      const futurePct  = adjByKey[`${podKey}:${lineType}`]
+        ?? adjByName[`${podNameLower}:${lineType}`]
+        ?? 0
+      const futCells = hasBudgetLines ? [] : remainingArr.map(m => ({
+        budget_line_id: actLine.id,
+        month:          m,
+        amount:         Math.round(avgMonthly * (1 + futurePct / 100)),
+      })).filter(c => c.amount !== 0)
+
+      const allCells = [...ytdCells, ...futCells]
+      if (allCells.length > 0) await supabase.from('budget_cells').insert(allCells)
     }
   }
 
