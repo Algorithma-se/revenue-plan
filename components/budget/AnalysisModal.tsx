@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   getBudgetScenarios, getScenarioAnalysis, runScenarioAnalysis,
 } from '@/app/actions/budget'
-import type { BudgetScenario, ScenarioAnalysis, AnalysisSection } from '@/app/actions/budget'
+import type { BudgetScenario, ScenarioAnalysis, AnalysisSection, AnalysisResult } from '@/app/actions/budget'
 import { fyLabel } from '@/lib/plan-utils'
 
 interface Props {
@@ -75,14 +75,13 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
     if (!selectedId) return
     setRunning(true)
     setError(null)
-    try {
-      const result = await runScenarioAnalysis(selectedId, fyStart)
-      setAnalysis(result)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Analysis failed')
-    } finally {
-      setRunning(false)
+    const result: AnalysisResult = await runScenarioAnalysis(selectedId, fyStart)
+    if (result.ok) {
+      setAnalysis(result.data)
+    } else {
+      setError(result.error)
     }
+    setRunning(false)
   }
 
   if (!open) return null

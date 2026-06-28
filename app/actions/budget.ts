@@ -250,34 +250,56 @@ export interface ScenarioAnalysis {
   generatedAt: string
 }
 
+// In Next.js 16, expected errors must be returned as values, not thrown.
+// Throwing from a server action triggers the RSC error boundary on the client.
+export type AnalysisResult =
+  | { ok: true;  data: ScenarioAnalysis }
+  | { ok: false; error: string }
+
 export async function getScenarioAnalysis(
   scenarioId: string,
   fyStart:    number,
 ): Promise<ScenarioAnalysis | null> {
-  const supabase = await createAdminSupabase()
-  const { data } = await supabase
-    .from('scenario_analyses')
-    .select('headline, sections, actions, adjustments, generated_at')
-    .eq('scenario_id', scenarioId)
-    .eq('fy_start', fyStart)
-    .maybeSingle()
-  if (!data) return null
-  return {
-    headline:    data.headline,
-    sections:    data.sections,
-    actions:     data.actions,
-    adjustments: data.adjustments,
-    generatedAt: data.generated_at,
+  try {
+    const supabase = await createAdminSupabase()
+    const { data } = await supabase
+      .from('scenario_analyses')
+      .select('headline, sections, actions, adjustments, generated_at')
+      .eq('scenario_id', scenarioId)
+      .eq('fy_start', fyStart)
+      .maybeSingle()
+    if (!data) return null
+    return {
+      headline:    data.headline,
+      sections:    data.sections,
+      actions:     data.actions,
+      adjustments: data.adjustments,
+      generatedAt: data.generated_at,
+    }
+  } catch {
+    return null
   }
+}
+
+function extractJson(text: string): string {
+  // Strip markdown code fences if present
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fenceMatch) return fenceMatch[1].trim()
+  // Try to find first { … } block
+  const start = text.indexOf('{')
+  const end   = text.lastIndexOf('}')
+  if (start !== -1 && end > start) return text.slice(start, end + 1)
+  return text.trim()
 }
 
 export async function runScenarioAnalysis(
   scenarioId: string,
   fyStart:    number,
-): Promise<ScenarioAnalysis> {
+): Promise<AnalysisResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+  if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY not configured' }
 
+  try {
   const supabase = await createAdminSupabase()
 
   // ── Load data ────────────────────────────────────────────────────────────────
@@ -296,7 +318,7 @@ export async function runScenarioAnalysis(
   const ytdMonths = allMonths.filter(m => m <= todayStr)
 
   if (ytdMonths.length === 0) {
-    throw new Error('No YTD months available for analysis — fiscal year has not started yet')
+    return { ok: false, error: 'No YTD months available — fiscal year has not started yet' }
   }
 
   // ── Aggregate budget by podKey for YTD months ────────────────────────────────
@@ -395,13 +417,13 @@ Be honest and direct. No fluff.`
   })
 
   const block = message.content[0]
-  if (block.type !== 'text') throw new Error('Unexpected AI response type')
+  if (block.type !== 'text') return { ok: false, error: 'Unexpected AI response type' }
 
   let aiResponse: { headline: string; sections: { key: string; name: string; narrative: string }[]; actions: string[]; adjustments: { section: string; suggestion: string }[] }
   try {
-    aiResponse = JSON.parse(block.text)
+    aiResponse = JSON.parse(extractJson(block.text))
   } catch {
-    throw new Error(`AI returned non-JSON: ${block.text.slice(0, 200)}`)
+    return { ok: false, error: `AI returned unexpected format. Raw: ${block.text.slice(0, 300)}` }
   }
 
   // Merge AI narratives back with the numeric data we computed
@@ -442,5 +464,8 @@ Be honest and direct. No fluff.`
       { onConflict: 'scenario_id,fy_start' },
     )
 
-  return { ...parsed, generatedAt }
+  return { ok: true, data: { ...parsed, generatedAt } }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Analysis failed' }
+  }
 }
