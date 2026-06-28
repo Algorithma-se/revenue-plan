@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL('/login?error=domain', origin))
       }
 
-      return NextResponse.redirect(new URL('/', origin))
+      return NextResponse.redirect(new URL('/plan', origin))
     }
   }
 

@@ -19,8 +19,7 @@ type NavItem =
   | { type: 'sep'; id: string; flag: string | null }
 
 const BASE_NAV_ITEMS: NavItem[] = [
-  { href: '/',                 label: 'P&L Workbench',    flag: null       },
-  { href: '/plan',             label: 'P&L Overview',     flag: null       },
+  { href: '/plan',             label: 'P&L',              flag: null       },
   { href: '/budget',           label: 'Budget',           flag: null       },
   { type: 'sep', id: 'sep1',  flag: 'invoices'                            },
   { href: '/invoice-overview', label: 'Invoice Overview', flag: 'invoices' },
