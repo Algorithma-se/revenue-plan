@@ -698,5 +698,85 @@ export async function createAdjustedScenario(
     if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
   }
 
+  // ── Synthetic lines for actuals with no budget counterpart ───────────────────
+  // Track which pod+lineType combinations already have budget lines
+  const coveredKeys = new Set<string>()
+  for (const line of lines) {
+    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    coveredKeys.add(`${pk}:${line.line_type}`)
+  }
+
+  const ytdArr = [...ytdMonths]
+  const remainingArr = allMonths.filter(m => !ytdMonths.has(m))
+
+  for (const [podKey, monthData] of Object.entries(actuals)) {
+    // Resolve segment + pod_id from podKey
+    let segment: 'platform' | 'services' | 'leadership'
+    let pod_id: string | null = null
+    let podDisplayName: string
+
+    if (podKey === '__platform__') {
+      segment = 'platform'; podDisplayName = 'AOS Platform'
+    } else if (podKey === '__leadership__') {
+      segment = 'leadership'; podDisplayName = 'Leadership'
+    } else {
+      segment = 'services'; pod_id = podKey
+      podDisplayName = Object.entries(podNameById).find(([id]) => id === podKey)?.[1] ?? podKey
+    }
+
+    const podNameLower = podDisplayName.toLowerCase()
+
+    for (const lineType of ['revenue', 'cost'] as const) {
+      if (coveredKeys.has(`${podKey}:${lineType}`)) continue
+
+      // Check if there are any actuals for this pod+lineType
+      const ytdTotal = ytdArr.reduce((s, m) => {
+        const a = monthData[m]
+        return s + (a ? (lineType === 'revenue' ? a.revA + a.revB : a.costA + a.costB) : 0)
+      }, 0)
+      if (ytdTotal === 0) continue
+
+      // Average monthly actual → project into remaining months
+      const avgMonthly = ytdArr.length > 0 ? Math.round(ytdTotal / ytdArr.length) : 0
+      const futurePct  = adjByKey[`${podKey}:${lineType}`]
+        ?? adjByName[`${podNameLower}:${lineType}`]
+        ?? 0
+
+      const { data: newLine, error: lErr } = await supabase
+        .from('budget_lines')
+        .insert({
+          scenario_id:  scenario.id,
+          segment,
+          pod_id,
+          account_code: 'actual',
+          line_type:    lineType,
+          label:        lineType === 'revenue' ? 'Revenue (from actuals)' : 'Costs (from actuals)',
+          sort:         999,
+        })
+        .select('id')
+        .single()
+      if (lErr || !newLine) continue
+
+      const newCells = [
+        // YTD months: use actual amounts directly
+        ...ytdArr.map(m => {
+          const a = monthData[m]
+          const amount = a ? (lineType === 'revenue' ? a.revA + a.revB : a.costA + a.costB) : 0
+          return { budget_line_id: newLine.id, month: m, amount }
+        }).filter(c => c.amount !== 0),
+        // Remaining months: project from avg monthly + Allie's pct
+        ...remainingArr.map(m => ({
+          budget_line_id: newLine.id,
+          month:          m,
+          amount:         futurePct !== 0
+            ? Math.round(avgMonthly * (1 + futurePct / 100))
+            : avgMonthly,
+        })).filter(c => c.amount !== 0),
+      ]
+
+      if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
+    }
+  }
+
   return { ok: true, scenarioId: scenario.id }
 }
