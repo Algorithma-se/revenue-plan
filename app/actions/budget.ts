@@ -588,23 +588,23 @@ export async function createAdjustedScenario(
   sourceScenarioId: string,
   fyStart:          number,
   name:             string,
+  adjustments:      ScenarioAdjustment[],
 ): Promise<CreateAdjustedResult> {
   const supabase = await createAdminSupabase()
 
-  // Load numeric adjustments from stored analysis
-  const { data: stored } = await supabase
-    .from('scenario_analyses')
-    .select('scenario_adjustments')
-    .eq('scenario_id', sourceScenarioId)
-    .eq('fy_start', fyStart)
-    .maybeSingle()
+  // Build lookup by key and by name (AI may echo name instead of UUID key)
+  const adjByKey:  Record<string, number> = {}
+  const adjByName: Record<string, number> = {}
+  for (const a of adjustments) {
+    adjByKey[`${a.key}:${a.lineType}`]              = a.pct
+    adjByName[`${a.name.toLowerCase()}:${a.lineType}`] = a.pct
+  }
 
-  const adjList: ScenarioAdjustment[] = stored?.scenario_adjustments ?? []
-  const adjMap: Record<string, number> = {}
-  for (const a of adjList) adjMap[`${a.key}:${a.lineType}`] = a.pct
-
-  // Load source lines + cells
+  // Load source lines + cells and pod names
   const { lines, cells } = await getBudgetData(sourceScenarioId)
+  const { data: podRows } = await supabase.from('pods').select('id, name')
+  const podNameById: Record<string, string> = {}
+  for (const p of podRows ?? []) podNameById[p.id] = p.name
 
   // Remaining months = after current month
   const allMonths = getFiscalMonths(fyStart)
@@ -621,9 +621,14 @@ export async function createAdjustedScenario(
   if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
 
   for (let i = 0; i < lines.length; i++) {
-    const line   = lines[i]
-    const podKey = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    const pct    = adjMap[`${podKey}:${line.line_type}`] ?? 0
+    const line    = lines[i]
+    const podKey  = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    const podName = line.segment === 'services'
+      ? (line.pod_id ? (podNameById[line.pod_id] ?? '').toLowerCase() : '')
+      : line.segment
+    const pct = adjByKey[`${podKey}:${line.line_type}`]
+      ?? adjByName[`${podName}:${line.line_type}`]
+      ?? 0
 
     const { data: newLine, error: lErr } = await supabase
       .from('budget_lines')

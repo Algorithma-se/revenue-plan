@@ -338,7 +338,7 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
                     onKeyDown={async e => {
                       if (e.key === 'Enter' && newScenarioName.trim() && selectedId) {
                         setCreateError(null)
-                        const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim())
+                        const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim(), analysis?.scenarioAdjustments ?? [])
                         if (r.ok) { setCreateSuccess(true); setCreatingScenario(false) }
                         else setCreateError(r.error)
                       }
@@ -351,7 +351,7 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
                     onClick={async () => {
                       if (!newScenarioName.trim() || !selectedId) return
                       setCreateError(null)
-                      const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim())
+                      const r = await createAdjustedScenario(selectedId, fyStart, newScenarioName.trim(), analysis?.scenarioAdjustments ?? [])
                       if (r.ok) { setCreateSuccess(true); setCreatingScenario(false) }
                       else setCreateError(r.error)
                     }}
