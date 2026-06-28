@@ -155,75 +155,76 @@ export async function upsertBudgetCell(lineId: string, month: string, amount: nu
   if (error) throw new Error(error.message)
 }
 
-// account_code → month → { a, b } amounts (SEK)
-export type PlanActuals = {
-  revenue: Record<string, Record<string, { a: number; b: number }>>
-  costs:   Record<string, Record<string, { a: number; b: number }>>
-}
+// podKey → month → { revA, revB, costA, costB } amounts (SEK)
+// podKey: pod_id for services items, '__platform__' or '__leadership__' for segment items
+export type PodActuals = Record<string, Record<string, {
+  revA: number; revB: number; costA: number; costB: number
+}>>
 
-export async function getPlanActuals(fyStart: number): Promise<PlanActuals> {
+export async function getPodActuals(fyStart: number): Promise<PodActuals> {
   const supabase = await createAdminSupabase()
   const months = getFiscalMonths(fyStart)
+  const result: PodActuals = {}
+
+  function acc(key: string, month: string, field: 'revA' | 'revB' | 'costA' | 'costB', amount: number) {
+    if (!result[key]) result[key] = {}
+    if (!result[key][month]) result[key][month] = { revA: 0, revB: 0, costA: 0, costB: 0 }
+    result[key][month][field] += amount
+  }
 
   // ── Revenue ────────────────────────────────────────────────────────────────
   const { data: revItems } = await supabase
     .from('manual_revenue_items')
-    .select('id, account_code')
-    .not('account_code', 'is', null)
+    .select('id, pod_id, segment')
 
-  const revItemMap: Record<string, string> = {}
-  for (const item of (revItems ?? [])) revItemMap[item.id] = item.account_code
+  const revKeyMap: Record<string, string> = {}
+  for (const item of (revItems ?? [])) {
+    revKeyMap[item.id] = item.segment === 'services'
+      ? (item.pod_id ?? '__no_pod__')
+      : `__${item.segment}__`
+  }
 
-  const revItemIds = Object.keys(revItemMap)
-  const revenue: PlanActuals['revenue'] = {}
-
-  if (revItemIds.length > 0) {
+  const revIds = Object.keys(revKeyMap)
+  if (revIds.length > 0) {
     const { data: revCells } = await supabase
       .from('plan_revenue_cells')
       .select('manual_revenue_item_id, month, amount, status')
-      .in('manual_revenue_item_id', revItemIds)
+      .in('manual_revenue_item_id', revIds)
       .in('status', ['A', 'B'])
       .in('month', [...months])
 
-    for (const cell of (revCells ?? [])) {
-      const code = revItemMap[cell.manual_revenue_item_id]
-      if (!code) continue
-      if (!revenue[code])          revenue[code] = {}
-      if (!revenue[code][cell.month]) revenue[code][cell.month] = { a: 0, b: 0 }
-      if (cell.status === 'A') revenue[code][cell.month].a += cell.amount
-      else                     revenue[code][cell.month].b += cell.amount
+    for (const c of (revCells ?? [])) {
+      const key = revKeyMap[c.manual_revenue_item_id]
+      if (key) acc(key, c.month, c.status === 'A' ? 'revA' : 'revB', c.amount)
     }
   }
 
   // ── Costs ──────────────────────────────────────────────────────────────────
   const { data: costItems } = await supabase
     .from('cost_items')
-    .select('id, account_code')
-    .not('account_code', 'is', null)
+    .select('id, pod_id, segment')
 
-  const costItemMap: Record<string, string> = {}
-  for (const item of (costItems ?? [])) costItemMap[item.id] = item.account_code
+  const costKeyMap: Record<string, string> = {}
+  for (const item of (costItems ?? [])) {
+    costKeyMap[item.id] = item.segment === 'services'
+      ? (item.pod_id ?? '__no_pod__')
+      : `__${item.segment}__`
+  }
 
-  const costItemIds = Object.keys(costItemMap)
-  const costs: PlanActuals['costs'] = {}
-
-  if (costItemIds.length > 0) {
+  const costIds = Object.keys(costKeyMap)
+  if (costIds.length > 0) {
     const { data: costCells } = await supabase
       .from('plan_cost_cells')
       .select('cost_item_id, month, amount, status')
-      .in('cost_item_id', costItemIds)
+      .in('cost_item_id', costIds)
       .in('status', ['A', 'B'])
       .in('month', [...months])
 
-    for (const cell of (costCells ?? [])) {
-      const code = costItemMap[cell.cost_item_id]
-      if (!code) continue
-      if (!costs[code])            costs[code] = {}
-      if (!costs[code][cell.month]) costs[code][cell.month] = { a: 0, b: 0 }
-      if (cell.status === 'A') costs[code][cell.month].a += cell.amount
-      else                     costs[code][cell.month].b += cell.amount
+    for (const c of (costCells ?? [])) {
+      const key = costKeyMap[c.cost_item_id]
+      if (key) acc(key, c.month, c.status === 'A' ? 'costA' : 'costB', c.amount)
     }
   }
 
-  return { revenue, costs }
+  return result
 }

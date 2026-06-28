@@ -9,9 +9,9 @@ import { BudgetCell } from '@/components/budget/BudgetCell'
 import {
   getBudgetScenarios, createBudgetScenario, renameBudgetScenario,
   deleteBudgetScenario, getBudgetData, addBudgetLine, deleteBudgetLine,
-  upsertBudgetCell, getPlanActuals,
+  upsertBudgetCell, getPodActuals,
 } from '@/app/actions/budget'
-import type { BudgetScenario, BudgetLine, BudgetCells, PlanActuals } from '@/app/actions/budget'
+import type { BudgetScenario, BudgetLine, BudgetCells, PodActuals } from '@/app/actions/budget'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,21 +105,21 @@ function varStr(v: number) {
   return k > 0 ? `+${k.toLocaleString('sv-SE')}` : k.toLocaleString('sv-SE')
 }
 
-function varCls(v: number, lineType: 'revenue' | 'cost') {
-  if (v === 0) return 'text-[#9CA3AF]'
-  const good = lineType === 'revenue' ? v < 0 : v > 0  // rev: actual>budget=green; cost: budget>actual=green
+// rev: actual > budget = green (overperforming); cost: actual < budget = green (under budget)
+function varCls(actual: number, budget: number, type: 'revenue' | 'cost') {
+  if (actual === 0 && budget === 0) return 'text-[#9CA3AF]'
+  const good = type === 'revenue' ? actual >= budget : actual <= budget
   return good ? 'text-[#16A34A]' : 'text-[#DC2626]'
 }
 
 // ─── Line row ────────────────────────────────────────────────────────────────
 
-function LineRow({ line, months, cells, onSave, onDelete, lineActuals }: {
-  line:        BudgetLine
-  months:      readonly string[]
-  cells:       Record<string, number>
-  onSave:      (lineId: string, month: string, amount: number) => Promise<void>
-  onDelete:    (lineId: string) => Promise<void>
-  lineActuals?: Record<string, { a: number; b: number }> | null
+function LineRow({ line, months, cells, onSave, onDelete }: {
+  line:     BudgetLine
+  months:   readonly string[]
+  cells:    Record<string, number>
+  onSave:   (lineId: string, month: string, amount: number) => Promise<void>
+  onDelete: (lineId: string) => Promise<void>
 }) {
   const total = months.reduce((s, m) => s + (cells[m] ?? 0), 0)
   return (
@@ -137,7 +137,6 @@ function LineRow({ line, months, cells, onSave, onDelete, lineActuals }: {
           <BudgetCell
             amount={cells[m] ?? 0}
             onSave={v => onSave(line.id, m, v)}
-            actual={lineActuals?.[m]}
           />
         </td>
       ))}
@@ -162,9 +161,8 @@ function LineRow({ line, months, cells, onSave, onDelete, lineActuals }: {
 
 // ─── Line group (Revenue or Cost) ─────────────────────────────────────────────
 
-function LineGroup({ groupLabel, lineType, lines, months, cells, onSave, onDelete, validCodes, onAdd, actuals }: {
+function LineGroup({ groupLabel, lines, months, cells, onSave, onDelete, validCodes, onAdd }: {
   groupLabel: string
-  lineType:   'revenue' | 'cost'
   lines:      BudgetLine[]
   months:     readonly string[]
   cells:      BudgetCells
@@ -172,25 +170,11 @@ function LineGroup({ groupLabel, lineType, lines, months, cells, onSave, onDelet
   onDelete:   (lineId: string) => Promise<void>
   validCodes: AccountDef[]
   onAdd:      (code: string, label: string) => Promise<void>
-  actuals?:   Record<string, Record<string, { a: number; b: number }>> | null
 }) {
   const [adding, setAdding] = useState(false)
 
   const subtotal = sumLines(lines.map(l => l.id), cells, months)
   const fyTotal  = months.reduce((s, m) => s + (subtotal[m] ?? 0), 0)
-
-  const actualByMonth = actuals
-    ? Object.fromEntries(months.map(m => [
-        m,
-        lines.reduce((s, l) => {
-          const ac = actuals[l.account_code]?.[m]
-          return s + (ac ? ac.a + ac.b : 0)
-        }, 0),
-      ]))
-    : null
-
-  const fyActual = actualByMonth ? months.reduce((s, m) => s + (actualByMonth[m] ?? 0), 0) : null
-  const showTracking = actuals != null
 
   return (
     <>
@@ -202,8 +186,7 @@ function LineGroup({ groupLabel, lineType, lines, months, cells, onSave, onDelet
 
       {lines.map(line => (
         <LineRow key={line.id} line={line} months={months}
-          cells={cells[line.id] ?? {}} onSave={onSave} onDelete={onDelete}
-          lineActuals={actuals ? (actuals[line.account_code] ?? null) : null} />
+          cells={cells[line.id] ?? {}} onSave={onSave} onDelete={onDelete} />
       ))}
 
       {adding && (
@@ -225,55 +208,19 @@ function LineGroup({ groupLabel, lineType, lines, months, cells, onSave, onDelet
       </tr>
 
       {(lines.length > 0 || fyTotal > 0) && (
-        <>
-          <tr className="bg-[#F9FAFB] border-t border-[#E5E7EB]">
-            <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#6B7280] uppercase tracking-widest">
-              {groupLabel} budget
+        <tr className="bg-[#F9FAFB] border-t border-[#E5E7EB]">
+          <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#6B7280] uppercase tracking-widest">
+            {groupLabel} subtotal
+          </td>
+          {months.map(m => (
+            <td key={m} className="px-1 py-1.5 text-right text-xs font-semibold text-[#374151] tabular-nums">
+              {kFmt(subtotal[m] ?? 0)}
             </td>
-            {months.map(m => (
-              <td key={m} className="px-1 py-1.5 text-right text-xs font-semibold text-[#374151] tabular-nums">
-                {kFmt(subtotal[m] ?? 0)}
-              </td>
-            ))}
-            <td className="px-2 py-1.5 text-right text-xs font-bold text-[#111827] tabular-nums">
-              {kFmt(fyTotal)}
-            </td>
-          </tr>
-
-          {showTracking && actualByMonth && (
-            <>
-              <tr className="bg-[#F9FAFB]">
-                <td colSpan={2} className="pl-4 pr-2 py-1 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest">
-                  Actual A+B
-                </td>
-                {months.map(m => (
-                  <td key={m} className="px-1 py-1 text-right text-[10px] font-semibold text-[#6B7280] tabular-nums">
-                    {actualByMonth[m] === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(actualByMonth[m])}
-                  </td>
-                ))}
-                <td className="px-2 py-1 text-right text-[10px] font-bold text-[#6B7280] tabular-nums">
-                  {fyActual === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(fyActual!)}
-                </td>
-              </tr>
-              <tr className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                <td colSpan={2} className="pl-4 pr-2 py-1 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-widest">
-                  Variance
-                </td>
-                {months.map(m => {
-                  const v = (subtotal[m] ?? 0) - (actualByMonth[m] ?? 0)
-                  return (
-                    <td key={m} className={`px-1 py-1 text-right text-[10px] font-bold tabular-nums ${varCls(v, lineType)}`}>
-                      {varStr(v)}
-                    </td>
-                  )
-                })}
-                <td className={`px-2 py-1 text-right text-[10px] font-bold tabular-nums ${varCls(fyTotal - (fyActual ?? 0), lineType)}`}>
-                  {varStr(fyTotal - (fyActual ?? 0))}
-                </td>
-              </tr>
-            </>
-          )}
-        </>
+          ))}
+          <td className="px-2 py-1.5 text-right text-xs font-bold text-[#111827] tabular-nums">
+            {kFmt(fyTotal)}
+          </td>
+        </tr>
       )}
     </>
   )
@@ -281,7 +228,7 @@ function LineGroup({ groupLabel, lineType, lines, months, cells, onSave, onDelet
 
 // ─── Section card ────────────────────────────────────────────────────────────
 
-function SectionCard({ section, label, badge, badgeClass, months, lines, cells, fyStart, scenarioId, podId = null, onLinesChange, onSave, actuals }: {
+function SectionCard({ section, label, badge, badgeClass, months, lines, cells, fyStart, scenarioId, podId = null, onLinesChange, onSave, podKey, podActuals }: {
   section:       'platform' | 'services' | 'leadership'
   label:         string
   badge:         string
@@ -294,7 +241,8 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
   podId?:        string | null
   onLinesChange: (lines: BudgetLine[]) => void
   onSave:        (lineId: string, month: string, amount: number) => Promise<void>
-  actuals?:      PlanActuals | null
+  podKey:        string
+  podActuals:    PodActuals | null
 }) {
   const revLines  = lines.filter(l => l.line_type === 'revenue')
   const costLines = lines.filter(l => l.line_type === 'cost')
@@ -308,6 +256,13 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
   const totalRev    = months.reduce((s, m) => s + (revByMonth[m] ?? 0), 0)
   const totalCost   = months.reduce((s, m) => s + (costByMonth[m] ?? 0), 0)
   const totalMargin = totalRev - totalCost
+
+  const podMonthActuals = podActuals?.[podKey] ?? null
+  const actualRevByMonth  = Object.fromEntries(months.map(m => [m, (podMonthActuals?.[m]?.revA ?? 0) + (podMonthActuals?.[m]?.revB ?? 0)]))
+  const actualCostByMonth = Object.fromEntries(months.map(m => [m, (podMonthActuals?.[m]?.costA ?? 0) + (podMonthActuals?.[m]?.costB ?? 0)]))
+  const fyActualRev  = months.reduce((s, m) => s + actualRevByMonth[m], 0)
+  const fyActualCost = months.reduce((s, m) => s + actualCostByMonth[m], 0)
+  const showTracking = podActuals !== null
 
   async function handleAdd(type: 'revenue' | 'cost', code: string, label: string) {
     const newLine = await addBudgetLine(scenarioId, fyStart, {
@@ -370,7 +325,6 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
             {revCodes.length > 0 && (
               <LineGroup
                 groupLabel="Revenue"
-                lineType="revenue"
                 lines={revLines}
                 months={months}
                 cells={cells}
@@ -378,12 +332,10 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
                 onDelete={handleDelete}
                 validCodes={revCodes}
                 onAdd={(code, label) => handleAdd('revenue', code, label)}
-                actuals={actuals?.revenue ?? null}
               />
             )}
             <LineGroup
               groupLabel="Costs"
-              lineType="cost"
               lines={costLines}
               months={months}
               cells={cells}
@@ -391,9 +343,8 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
               onDelete={handleDelete}
               validCodes={costCodes}
               onAdd={(code, label) => handleAdd('cost', code, label)}
-              actuals={actuals?.costs ?? null}
             />
-            {/* Margin row */}
+            {/* Budget margin row */}
             {revCodes.length > 0 && (revLines.length > 0 || costLines.length > 0) && (
               <tr className="bg-[#F9FAFB] border-t border-[#E5E7EB]">
                 <td colSpan={2} className="pl-4 pr-2 py-2 text-[10px] font-bold text-[#9CA3AF] uppercase tracking-widest">
@@ -408,6 +359,68 @@ function SectionCard({ section, label, badge, badgeClass, months, lines, cells, 
                   {pctStr(totalMargin, totalRev)}
                 </td>
               </tr>
+            )}
+            {/* vs P&L actuals block */}
+            {showTracking && (
+              <>
+                <tr><td colSpan={months.length + 3} className="bg-[#EFF6FF] py-px" /></tr>
+                {revCodes.length > 0 && (
+                  <tr className="bg-[#F0F7FF]">
+                    <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#3B82F6] uppercase tracking-widest">
+                      P&L Revenue (A+B)
+                    </td>
+                    {months.map(m => (
+                      <td key={m} className="px-1 py-1.5 text-right text-xs tabular-nums text-[#374151]">
+                        {actualRevByMonth[m] === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(actualRevByMonth[m])}
+                      </td>
+                    ))}
+                    <td className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums text-[#111827]">
+                      {fyActualRev === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(fyActualRev)}
+                    </td>
+                  </tr>
+                )}
+                <tr className="bg-[#F0F7FF]">
+                  <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#3B82F6] uppercase tracking-widest">
+                    P&L Costs (A+B)
+                  </td>
+                  {months.map(m => (
+                    <td key={m} className="px-1 py-1.5 text-right text-xs tabular-nums text-[#374151]">
+                      {actualCostByMonth[m] === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(actualCostByMonth[m])}
+                    </td>
+                  ))}
+                  <td className="px-2 py-1.5 text-right text-xs font-semibold tabular-nums text-[#111827]">
+                    {fyActualCost === 0 ? <span className="text-[#D1D5DB]">—</span> : kFmt(fyActualCost)}
+                  </td>
+                </tr>
+                {revCodes.length > 0 && (
+                  <tr className="bg-[#F0F7FF]">
+                    <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#3B82F6] uppercase tracking-widest">
+                      Rev variance
+                    </td>
+                    {months.map(m => (
+                      <td key={m} className={`px-1 py-1.5 text-right text-xs font-bold tabular-nums ${varCls(actualRevByMonth[m], revByMonth[m] ?? 0, 'revenue')}`}>
+                        {varStr(actualRevByMonth[m] - (revByMonth[m] ?? 0))}
+                      </td>
+                    ))}
+                    <td className={`px-2 py-1.5 text-right text-xs font-bold tabular-nums ${varCls(fyActualRev, totalRev, 'revenue')}`}>
+                      {varStr(fyActualRev - totalRev)}
+                    </td>
+                  </tr>
+                )}
+                <tr className="bg-[#F0F7FF]">
+                  <td colSpan={2} className="pl-4 pr-2 py-1.5 text-[10px] font-bold text-[#3B82F6] uppercase tracking-widest">
+                    Cost variance
+                  </td>
+                  {months.map(m => (
+                    <td key={m} className={`px-1 py-1.5 text-right text-xs font-bold tabular-nums ${varCls(actualCostByMonth[m], costByMonth[m] ?? 0, 'cost')}`}>
+                      {varStr(actualCostByMonth[m] - (costByMonth[m] ?? 0))}
+                    </td>
+                  ))}
+                  <td className={`px-2 py-1.5 text-right text-xs font-bold tabular-nums ${varCls(fyActualCost, totalCost, 'cost')}`}>
+                    {varStr(fyActualCost - totalCost)}
+                  </td>
+                </tr>
+              </>
             )}
           </tbody>
         </table>
@@ -432,7 +445,7 @@ export default function BudgetPage() {
   const [renameName, setRenameName] = useState('')
   const [dropOpen,   setDropOpen]   = useState(false)
   const [tracking,   setTracking]   = useState(false)
-  const [actuals,    setActuals]    = useState<PlanActuals | null>(null)
+  const [actuals,    setActuals]    = useState<PodActuals | null>(null)
   const [loadingActuals, setLoadingActuals] = useState(false)
 
   const months = getFiscalMonths(fyStart)
@@ -468,7 +481,7 @@ export default function BudgetPage() {
     setActuals(null)
     if (tracking) {
       setLoadingActuals(true)
-      getPlanActuals(fyStart).then(a => { setActuals(a); setLoadingActuals(false) })
+      getPodActuals(fyStart).then(a => { setActuals(a); setLoadingActuals(false) })
     }
   }, [fyStart]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -477,7 +490,7 @@ export default function BudgetPage() {
     setTracking(next)
     if (next && !actuals) {
       setLoadingActuals(true)
-      const a = await getPlanActuals(fyStart)
+      const a = await getPodActuals(fyStart)
       setActuals(a)
       setLoadingActuals(false)
     }
@@ -654,7 +667,8 @@ export default function BudgetPage() {
             fyStart={fyStart} scenarioId={activeId}
             onLinesChange={updated => setLines(prev => [...prev.filter(l => l.segment !== 'platform'), ...updated])}
             onSave={handleSave}
-            actuals={tracking ? actuals : null}
+            podKey="__platform__"
+            podActuals={tracking ? actuals : null}
           />
 
           {/* FDE Pods */}
@@ -669,7 +683,8 @@ export default function BudgetPage() {
                 ...updated,
               ])}
               onSave={handleSave}
-              actuals={tracking ? actuals : null}
+              podKey={pod.id}
+              podActuals={tracking ? actuals : null}
             />
           ))}
 
@@ -680,7 +695,8 @@ export default function BudgetPage() {
             fyStart={fyStart} scenarioId={activeId}
             onLinesChange={updated => setLines(prev => [...prev.filter(l => l.segment !== 'leadership'), ...updated])}
             onSave={handleSave}
-            actuals={tracking ? actuals : null}
+            podKey="__leadership__"
+            podActuals={tracking ? actuals : null}
           />
 
           {/* Summary */}
