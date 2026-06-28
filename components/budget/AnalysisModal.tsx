@@ -370,8 +370,7 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
               ) : (
                 <div>
                   <p className="text-sm text-[#6B7280] mb-3">
-                    Clone this scenario and apply Allie&apos;s suggested adjustments to remaining FY months.
-                    {(analysis.scenarioAdjustments?.length ?? 0) === 0 && ' Re-run the analysis to get numeric adjustments, or create a plain clone.'}
+                    Scales every budget line to match your YTD run rate — past months reflect what actually happened, future months project the same trajectory.
                   </p>
                   <button
                     onClick={() => {

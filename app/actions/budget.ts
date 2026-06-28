@@ -665,14 +665,11 @@ export async function createAdjustedScenario(
 
     const sourceCells = cells[line.id] ?? {}
     const newCells = allMonths
-      .filter(m => (sourceCells[m] ?? 0) !== 0 || remaining.has(m))
       .filter(m => (sourceCells[m] ?? 0) !== 0)
       .map(m => ({
         budget_line_id: newLine.id,
         month:          m,
-        amount: remaining.has(m)
-          ? Math.round((sourceCells[m] ?? 0) * ratio)
-          : (sourceCells[m] ?? 0),
+        amount:         Math.round((sourceCells[m] ?? 0) * ratio),
       }))
 
     if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
