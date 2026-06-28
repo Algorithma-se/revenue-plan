@@ -316,6 +316,7 @@ export interface ScenarioAnalysis {
   actions:             string[]
   adjustments:         { section: string; suggestion: string }[]
   scenarioAdjustments: ScenarioAdjustment[]
+  feasibilityNote:     string
   generatedAt:         string
 }
 
@@ -333,7 +334,7 @@ export async function getScenarioAnalysis(
     const supabase = await createAdminSupabase()
     const { data } = await supabase
       .from('scenario_analyses')
-      .select('headline, sections, actions, adjustments, scenario_adjustments, generated_at')
+      .select('headline, sections, actions, adjustments, scenario_adjustments, feasibility_note, generated_at')
       .eq('scenario_id', scenarioId)
       .eq('fy_start', fyStart)
       .maybeSingle()
@@ -344,6 +345,7 @@ export async function getScenarioAnalysis(
       actions:             data.actions,
       adjustments:         data.adjustments,
       scenarioAdjustments: data.scenario_adjustments ?? [],
+      feasibilityNote:     data.feasibility_note ?? '',
       generatedAt:         data.generated_at,
     }
   } catch {
@@ -460,50 +462,80 @@ export async function runScenarioAnalysis(
 
   const remainingMonths = allMonths.filter(m => m > todayStr)
 
-  function runRatePct(actual: number, budget: number): string {
-    if (budget === 0 && actual === 0) return 'n/a'
-    if (budget === 0) return 'no budget set'
-    const pct = Math.round((actual / budget - 1) * 100)
-    return `${Math.round((actual / budget) * 100)}% of budget (${pct >= 0 ? '+' : ''}${pct}% vs plan)`
+  // ── Remaining budget per section ─────────────────────────────────────────────
+  const remainingBudgetByKey: Record<string, { rev: number; cost: number }> = {}
+  for (const line of lines) {
+    const key = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    if (!remainingBudgetByKey[key]) remainingBudgetByKey[key] = { rev: 0, cost: 0 }
+    const lineRem = remainingMonths.reduce((s, m) => s + (cells[line.id]?.[m] ?? 0), 0)
+    if (line.line_type === 'revenue') remainingBudgetByKey[key].rev  += lineRem
+    else                              remainingBudgetByKey[key].cost += lineRem
   }
 
-  const sectionTable = sections.map(s =>
-    `  [${s.key}] ${s.name}:\n    Revenue: budget ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK — ${runRatePct(s.actualRev, s.budgetRev)}\n    Costs:   budget ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK — ${runRatePct(s.actualCost, s.budgetCost)}`
-  ).join('\n')
+  // ── Monthly actuals trend (last 3 months for context) ───────────────────────
+  const trendMonths = ytdMonths.slice(-3)
+  const monthTrendLines = trendMonths.map(m => {
+    const label = new Date(m).toLocaleString('en-SE', { month: 'short', year: '2-digit' })
+    const row = sections.map(s => {
+      const a = actuals[s.key]?.[m]
+      const rev  = a ? Math.round((a.revA + a.revB) / 1000) : 0
+      const cost = a ? Math.round((a.costA + a.costB) / 1000) : 0
+      return `${s.name}: rev ${rev} / cost ${cost}`
+    }).join(' | ')
+    return `  ${label}: ${row}`
+  }).join('\n')
 
-  const prompt = `You are Allie, CFO assistant for Algorithma (Swedish tech firm).
+  const sectionTable = sections.map(s => {
+    const remBudg = remainingBudgetByKey[s.key] ?? { rev: 0, cost: 0 }
+    const revPct  = s.budgetRev  > 0 ? ` (${Math.round(s.actualRev  / s.budgetRev  * 100)}% of budget)` : s.actualRev  > 0 ? ' (no budget)' : ''
+    const costPct = s.budgetCost > 0 ? ` (${Math.round(s.actualCost / s.budgetCost * 100)}% of budget)` : s.actualCost > 0 ? ' (no budget)' : ''
+    return [
+      `  [${s.key}] ${s.name}:`,
+      `    YTD Revenue:  budget ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK${revPct}`,
+      `    YTD Costs:    budget ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK${costPct}`,
+      `    Rem. budget:  rev ${fmt(remBudg.rev)} / cost ${fmt(remBudg.cost)} kSEK (${remainingMonths.length} month${remainingMonths.length !== 1 ? 's' : ''})`,
+    ].join('\n')
+  }).join('\n')
 
-Analyse YTD performance vs the "${scenarioName}" budget scenario for ${fyLabel}.
-YTD months covered: ${ytdMonths.length} (${ytdMonths[0].slice(0, 7)} to ${ytdMonths[ytdMonths.length - 1].slice(0, 7)}).
-Remaining FY months: ${remainingMonths.length}.
-All amounts in kSEK (thousands SEK).
+  const prompt = `You are a seasoned senior financial controller for Algorithma, a Swedish B2B tech firm. Your job is to produce a realistic full-year forecast for ${fyLabel} based on the "${scenarioName}" budget and ${ytdMonths.length} months of actuals.
 
-Section breakdown (YTD) — showing budget, actual, and YTD run rate:
+YTD period: ${ytdMonths[0].slice(0, 7)} → ${ytdMonths[ytdMonths.length - 1].slice(0, 7)} (${ytdMonths.length} months completed)
+Remaining: ${remainingMonths.length} month${remainingMonths.length !== 1 ? 's' : ''} (${remainingMonths.map(m => m.slice(0, 7)).join(', ')})
+All amounts in kSEK.
+
+── BUDGET vs ACTUALS (YTD) ──
 ${sectionTable}
 
-Total: budget rev ${fmt(total.budgetRev)} / actual ${fmt(total.actualRev)} kSEK | budget cost ${fmt(total.budgetCost)} / actual ${fmt(total.actualCost)} kSEK
-Total budget EBIT: ${fmt(total.budgetRev - total.budgetCost)} kSEK | actual EBIT: ${fmt(total.actualRev - total.actualCost)} kSEK
+Total YTD: budget rev ${fmt(total.budgetRev)} / actual ${fmt(total.actualRev)} kSEK | budget cost ${fmt(total.budgetCost)} / actual ${fmt(total.actualCost)} kSEK
+YTD EBIT: budget ${fmt(total.budgetRev - total.budgetCost)} / actual ${fmt(total.actualRev - total.actualCost)} kSEK
 
-Respond with ONLY valid JSON matching this exact schema — no markdown, no extra keys:
+── RECENT MONTHLY TREND (last ${trendMonths.length} months, kSEK) ──
+${monthTrendLines || '  (no monthly detail available)'}
+
+── YOUR TASK ──
+1. Diagnose each section: is the YTD variance structural (e.g. permanently lost revenue, recurring cost overrun) or timing-related (e.g. delayed deal, one-off cost)?
+2. Produce a scenarioAdjustments pct for remaining months for EVERY section where the forecast should differ from the original budget. The adjusted scenario will use: actuals for past months + (original budget × (1 + pct/100)) for remaining months.
+3. Validate: your adjustments must produce a full-year result that is internally consistent and defensible to a board.
+
+Think like a controller, not an optimist. Revenue pcts should reflect pipeline probability and delivery capacity. Cost pcts should reflect committed vs discretionary spend.
+
+Respond with ONLY valid JSON — no markdown, no extra keys:
 {
-  "headline": "single sharp sentence on overall YTD performance",
+  "headline": "one sharp sentence on YTD performance and full-year outlook",
   "sections": [
-    { "key": "<copy key from brackets above>", "name": "<section name>", "narrative": "2-3 sentence assessment" }
+    { "key": "<copy key from brackets above>", "name": "<section name>", "narrative": "2-3 sentences: what happened YTD, why, and what to expect for remaining months" }
   ],
   "actions": ["action 1", "action 2", "action 3"],
   "adjustments": [
-    { "section": "<section name>", "suggestion": "specific budget adjustment" }
+    { "section": "<section name>", "suggestion": "specific qualitative recommendation" }
   ],
   "scenarioAdjustments": [
-    { "key": "<copy key from brackets above>", "name": "<section name>", "lineType": "revenue or cost", "pct": <integer -80 to 80>, "reason": "one sentence" }
-  ]
+    { "key": "<copy key from brackets above>", "name": "<section name>", "lineType": "revenue or cost", "pct": <integer -80 to 80>, "reason": "controller-grade reasoning referencing specific numbers" }
+  ],
+  "feasibilityNote": "one sentence: does the adjusted full-year scenario make business sense given the data?"
 }
 
-Include one sections entry per section above. Copy keys exactly from the brackets.
-actions: top 3 recommended actions, direct and specific.
-adjustments: qualitative suggestions per section.
-scenarioAdjustments: IMPORTANT — for every section where revenue or cost deviates meaningfully from budget, provide a pct. This pct is applied to ALL months of the year (past and future) to create a realistic revised full-year scenario. Start from the YTD run rate shown above, then use your judgment: if the variance looks structural (ongoing underperformance, persistent cost overrun) use a pct close to the run rate; if it looks like a timing issue or one-off, be more conservative. Include BOTH revenue and cost entries for each affected section. Be bold where the data clearly shows a structural gap.
-Be honest and direct. No fluff.`
+Copy keys exactly from the brackets. Include a scenarioAdjustments entry for EVERY section+lineType pair where remaining months should differ from budget — including where you expect performance to continue below budget.`
 
   const client = new Anthropic({ apiKey })
   const message = await client.messages.create({
@@ -521,6 +553,7 @@ Be honest and direct. No fluff.`
     actions:             string[]
     adjustments:         { section: string; suggestion: string }[]
     scenarioAdjustments: { key: string; name: string; lineType: string; pct: number; reason: string }[]
+    feasibilityNote:     string
   }
   try {
     aiResponse = JSON.parse(extractJson(block.text))
@@ -528,8 +561,6 @@ Be honest and direct. No fluff.`
     return { ok: false, error: `AI returned unexpected format. Raw: ${block.text.slice(0, 300)}` }
   }
 
-  // Merge AI narratives back with the numeric data we computed
-  // Match by key first, fall back to name — the AI sees names in the prompt
   const mergedSections: AnalysisSection[] = sections.map(s => {
     const aiSection = aiResponse.sections.find(a => a.key === s.key)
       ?? aiResponse.sections.find(a => a.name === s.name)
@@ -560,6 +591,7 @@ Be honest and direct. No fluff.`
     actions:             aiResponse.actions,
     adjustments:         aiResponse.adjustments,
     scenarioAdjustments,
+    feasibilityNote:     aiResponse.feasibilityNote ?? '',
   }
 
   const generatedAt = new Date().toISOString()
@@ -575,6 +607,7 @@ Be honest and direct. No fluff.`
         actions:              parsed.actions,
         adjustments:          parsed.adjustments,
         scenario_adjustments: parsed.scenarioAdjustments,
+        feasibility_note:     parsed.feasibilityNote,
         generated_at:         generatedAt,
       },
       { onConflict: 'scenario_id,fy_start' },

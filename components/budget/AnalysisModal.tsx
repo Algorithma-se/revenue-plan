@@ -273,6 +273,14 @@ export function AnalysisModal({ open, onClose, fyStart }: Props) {
               </ol>
             </div>
 
+            {/* Feasibility note */}
+            {analysis.feasibilityNote && (
+              <div className="bg-[#F0FDF4] rounded-2xl border border-[#BBF7D0] px-6 py-4 flex gap-3 items-start">
+                <svg className="w-4 h-4 text-[#16A34A] mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <p className="text-sm text-[#15803D]"><span className="font-semibold">Feasibility: </span>{analysis.feasibilityNote}</p>
+              </div>
+            )}
+
             {/* Scenario adjustments */}
             {(analysis.adjustments.length > 0 || (analysis.scenarioAdjustments?.length ?? 0) > 0) && (
               <div className="bg-white rounded-2xl border border-[#EBEBEB] shadow-sm px-6 py-5">
