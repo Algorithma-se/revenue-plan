@@ -43,7 +43,7 @@ function TotalRow({ label, values, fy, accent, highlightIdx }: {
   highlightIdx?: number
 }) {
   const textColor = accent ? 'text-[#0F0F0F]' : 'text-[#374151]'
-  const bg = accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'
+  const bg = accent ? 'bg-[#EBF8FA]' : 'bg-[#F3FAFB]'
   return (
     <div className={`grid ${bg}`} style={colStyle(values.length)}>
       <div className={`px-3 py-2 text-xs font-semibold ${textColor} truncate`}>{label}</div>
@@ -64,7 +64,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
     ? <span className="text-[#D1D5DB]">—</span>
     : <>{Math.round(v / 1000).toLocaleString('sv-SE')} <span className="text-[#9CA3AF] font-normal">kSEK</span></>
   return (
-    <div className={`flex items-center justify-between px-4 py-2.5 ${accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'}`}>
+    <div className={`flex items-center justify-between px-4 py-2.5 ${accent ? 'bg-[#EBF8FA]' : 'bg-[#F3FAFB]'}`}>
       <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{label}</span>
       <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{fmt(value)}</span>
     </div>
@@ -181,7 +181,7 @@ export function PodSection({
 
   return (
     <>
-      <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+      <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
 
         {/* ── Pod header ─────────────────────────────────────────────────────── */}
         <div className="grid bg-gradient-to-r from-[#0F0F0F] to-[#1F2937]" style={CS}>
@@ -204,10 +204,10 @@ export function PodSection({
         {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+          <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
@@ -290,10 +290,10 @@ export function PodSection({
         {showOnly !== 'revenue' && <>
         <button
           onClick={toggleCosts}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-t border-[#C0E8F2] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
         >
           <ChevronIcon open={costsOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+          <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Costs</span>
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
@@ -357,8 +357,8 @@ export function PodSection({
         </>}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
-        {!isNoPod && !showOnly && <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
-          <div className="px-3 py-2 text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</div>
+        {!isNoPod && !showOnly && <div className="grid border-t-2 border-[#9ED3E3] bg-[#EBF8FA]" style={CS}>
+          <div className="px-3 py-2 text-xs font-bold text-[#5191A4] uppercase tracking-wider">CB1%</div>
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
             return (
@@ -390,7 +390,7 @@ export function PodSection({
         const mCostTotal = mIdx >= 0 ? costTotals[mIdx] : 0
         const mCB        = computeCB1(mRevTotal, mCostTotal)
         return (
-          <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+          <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
             {/* Pod header */}
             <div className="px-4 py-2.5 bg-gradient-to-r from-[#0F0F0F] to-[#1F2937] flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
@@ -399,9 +399,9 @@ export function PodSection({
 
             {/* Revenue section */}
             {showOnly !== 'costs' && <>
-              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
                 <ChevronIcon open={revenueOpen} />
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+                <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
               </button>
               {revenueOpen && <>
                 {revenueRows.map((row, i) => {
@@ -439,9 +439,9 @@ export function PodSection({
 
             {/* Costs section */}
             {showOnly !== 'revenue' && <>
-              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-t border-[#C0E8F2] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
                 <ChevronIcon open={costsOpen} />
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+                <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Costs</span>
               </button>
               {costsOpen && <>
                 {costRows.map((row, i) => {
@@ -472,8 +472,8 @@ export function PodSection({
 
             {/* CB1% */}
             {!isNoPod && !showOnly && (
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#F8FAFC] border-t-2 border-[#E5E7EB]">
-                <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</span>
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#EBF8FA] border-t-2 border-[#9ED3E3]">
+                <span className="text-xs font-bold text-[#5191A4] uppercase tracking-wider">CB1%</span>
                 <span className={`text-xs font-bold ${mCB === null ? 'text-[#D1D5DB]' : mCB >= 20 ? 'text-[#16A34A]' : mCB >= 0 ? 'text-[#D97706]' : 'text-[#DC2626]'}`}>
                   {mCB === null ? '—' : `${Math.round(mCB)}%`}
                 </span>

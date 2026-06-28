@@ -520,9 +520,9 @@ export default function PlanPage() {
         </div>
 
         {/* Mobile summary card */}
-        <div className="sm:hidden mt-4 bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden shadow-sm">
-          <div className="px-4 py-2.5 bg-[#F9F9F8] border-b border-[#EBEBEB]">
-            <span className="text-xs font-bold text-[#0F0F0F] uppercase tracking-wider">Summation — {mobileLabel}</span>
+        <div className="sm:hidden mt-4 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
+          <div className="px-4 py-2.5 bg-[#EBF8FA] border-b border-[#C0E8F2]">
+            <span className="text-xs font-bold text-[#5191A4] uppercase tracking-wider">Summation — {mobileLabel}</span>
           </div>
           <div className="p-4 grid grid-cols-2 gap-4">
             <div>

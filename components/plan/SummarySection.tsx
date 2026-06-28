@@ -89,20 +89,20 @@ export function SummarySection({
   const marginColor = (v: number) => v >= 0 ? 'text-[#16A34A]' : 'text-[#EF4444]'
 
   return (
-    <div className="bg-white rounded-2xl border border-[#EBEBEB] overflow-hidden mt-2">
-      <div className="px-3 py-2 bg-[#F9F9F8] border-b border-[#EBEBEB]">
-        <span className="text-xs font-bold text-[#0F0F0F] uppercase tracking-wider">Summation</span>
+    <div className="bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden mt-2">
+      <div className="px-3 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2]">
+        <span className="text-xs font-bold text-[#5191A4] uppercase tracking-wider">Summation</span>
       </div>
 
       {/* Month header */}
-      <div className="grid border-b border-[#EBEBEB]" style={CS}>
+      <div className="grid bg-[#EBF8FA] border-b border-[#C0E8F2]" style={CS}>
         <div className="px-2 py-1.5" />
         {months.map(m => (
-          <div key={m} className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
+          <div key={m} className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#5191A4] uppercase tracking-wider">
             {monthLabel(m)}
           </div>
         ))}
-        <div className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">FY</div>
+        <div className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#5191A4] uppercase tracking-wider">FY</div>
       </div>
 
       <SummaryRow label="Conservatism (FC)" values={conservatism} fy={fyConservatism} months={months} />
