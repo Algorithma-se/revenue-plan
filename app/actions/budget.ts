@@ -303,11 +303,15 @@ export async function runScenarioAnalysis(
   const supabase = await createAdminSupabase()
 
   // ── Load data ────────────────────────────────────────────────────────────────
-  const [{ lines, cells }, actuals, scenarios] = await Promise.all([
+  const [{ lines, cells }, actuals, scenarios, { data: allPods }] = await Promise.all([
     getBudgetData(scenarioId),
     getPodActuals(fyStart),
     getBudgetScenarios(fyStart),
+    supabase.from('pods').select('id, name, sort').order('sort'),
   ])
+
+  const podLookup: Record<string, { name: string; sort: number }> =
+    Object.fromEntries((allPods ?? []).map((p: { id: string; name: string; sort: number }) => [p.id, { name: p.name, sort: p.sort }]))
 
   const scenarioName = scenarios.find(s => s.id === scenarioId)?.name ?? 'Unknown'
 
@@ -322,7 +326,6 @@ export async function runScenarioAnalysis(
   }
 
   // ── Aggregate budget by podKey for YTD months ────────────────────────────────
-  // podKey mirrors getPodActuals: pod_id for services, '__platform__' / '__leadership__' for fixed segments
   const budgetByKey: Record<string, { rev: number; cost: number }> = {}
 
   for (const line of lines) {
@@ -335,14 +338,23 @@ export async function runScenarioAnalysis(
     else                              budgetByKey[key].cost += lineTotal
   }
 
-  // ── Build sections ordered: platform → services pods (by sort) → leadership ──
-  // Collect pod metadata from budget lines
+  // ── Build section list: platform → all service pods (budget + actuals) → leadership ──
+  // Start with pods that appear in budget lines
   const podMeta: { id: string; name: string; sort: number }[] = []
   const seenPods = new Set<string>()
   for (const line of lines) {
     if (line.segment === 'services' && line.pod_id && !seenPods.has(line.pod_id)) {
       seenPods.add(line.pod_id)
-      podMeta.push({ id: line.pod_id, name: line.pod_name ?? line.pod_id, sort: line.sort })
+      const meta = podLookup[line.pod_id]
+      podMeta.push({ id: line.pod_id, name: line.pod_name ?? meta?.name ?? line.pod_id, sort: meta?.sort ?? line.sort })
+    }
+  }
+  // Add pods that have P&L actuals but no budget lines in this scenario
+  for (const key of Object.keys(actuals)) {
+    if (!key.startsWith('__') && !seenPods.has(key)) {
+      seenPods.add(key)
+      const meta = podLookup[key]
+      podMeta.push({ id: key, name: meta?.name ?? key, sort: meta?.sort ?? 999 })
     }
   }
   podMeta.sort((a, b) => a.sort - b.sort)
@@ -376,8 +388,9 @@ export async function runScenarioAnalysis(
   const fyYear = fyStart + 1
   const fyLabel = `FY${fyStart}/${String(fyYear).slice(2)}`
 
+  // Include the key in the section table so the AI can echo it back for matching
   const sectionTable = sections.map(s =>
-    `  ${s.name}: budget rev ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK | budget cost ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK`
+    `  [${s.key}] ${s.name}: budget rev ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK | budget cost ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK`
   ).join('\n')
 
   const prompt = `You are Allie, CFO assistant for Algorithma (Swedish tech firm).
@@ -386,27 +399,27 @@ Analyse YTD performance vs the "${scenarioName}" budget scenario for ${fyLabel}.
 YTD months covered: ${ytdMonths.length} (${ytdMonths[0].slice(0, 7)} to ${ytdMonths[ytdMonths.length - 1].slice(0, 7)}).
 All amounts in kSEK (thousands SEK).
 
-Section breakdown (YTD):
+Section breakdown (YTD) — each line shows [key] name: numbers:
 ${sectionTable}
 
 Total: budget rev ${fmt(total.budgetRev)} / actual ${fmt(total.actualRev)} kSEK | budget cost ${fmt(total.budgetCost)} / actual ${fmt(total.actualCost)} kSEK
 Total budget EBIT: ${fmt(total.budgetRev - total.budgetCost)} kSEK | actual EBIT: ${fmt(total.actualRev - total.actualCost)} kSEK
 
-Respond with ONLY valid JSON in this exact schema — no markdown, no extra keys:
+Respond with ONLY valid JSON matching this exact schema — no markdown, no extra keys:
 {
   "headline": "single sharp sentence on overall YTD performance",
   "sections": [
-    { "key": "<key>", "name": "<name>", "narrative": "2-3 sentence assessment for this section" }
+    { "key": "<copy key from brackets above>", "name": "<section name>", "narrative": "2-3 sentence assessment" }
   ],
   "actions": ["action 1", "action 2", "action 3"],
   "adjustments": [
-    { "section": "<name>", "suggestion": "specific budget adjustment suggestion for remaining months" }
+    { "section": "<section name>", "suggestion": "specific budget adjustment for remaining months" }
   ]
 }
 
-sections array must include an entry for every section listed above (same keys and names).
+Include one sections entry per section above. Copy the key exactly from the brackets.
 actions: top 3 recommended actions, direct and specific.
-adjustments: one entry per section where a meaningful adjustment is warranted.
+adjustments: one entry per section where an adjustment is warranted.
 Be honest and direct. No fluff.`
 
   const client = new Anthropic({ apiKey })
@@ -427,8 +440,10 @@ Be honest and direct. No fluff.`
   }
 
   // Merge AI narratives back with the numeric data we computed
+  // Match by key first, fall back to name — the AI sees names in the prompt
   const mergedSections: AnalysisSection[] = sections.map(s => {
     const aiSection = aiResponse.sections.find(a => a.key === s.key)
+      ?? aiResponse.sections.find(a => a.name === s.name)
     return {
       key:        s.key,
       name:       s.name,
