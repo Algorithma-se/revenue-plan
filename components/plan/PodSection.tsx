@@ -204,7 +204,7 @@ export function PodSection({
         {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#CEEDF5] border-b border-[#A8DCE9] hover:bg-[#D9F3F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
           <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
@@ -399,7 +399,7 @@ export function PodSection({
 
             {/* Revenue section */}
             {showOnly !== 'costs' && <>
-              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#CEEDF5] border-b border-[#A8DCE9] hover:bg-[#D9F3F9] transition-colors">
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#EBF8FA] border-b border-[#C0E8F2] hover:bg-[#D9F3F9] transition-colors">
                 <ChevronIcon open={revenueOpen} />
                 <span className="text-[10px] font-bold text-[#5191A4] uppercase tracking-wider">Revenue</span>
               </button>
