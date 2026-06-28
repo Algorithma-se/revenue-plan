@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell } from '@/types/database'
+import type { Pod, RevenueRow, CostRow, PlanStatus, PlanRevenueCell, ItemSegment } from '@/types/database'
 import { sumCells, sumAllMonths, sumByStatus, computeCB1, monthLabel } from '@/lib/plan-utils'
 import type { Trend } from '@/lib/plan-utils'
 import { EditableCell } from './EditableCell'
@@ -43,7 +43,7 @@ function TotalRow({ label, values, fy, accent, highlightIdx }: {
   highlightIdx?: number
 }) {
   const textColor = accent ? 'text-[#0F0F0F]' : 'text-[#374151]'
-  const bg = accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'
+  const bg = accent ? 'bg-[#EBF8FA]' : 'bg-[#F3FAFB]'
   return (
     <div className={`grid ${bg}`} style={colStyle(values.length)}>
       <div className={`px-3 py-2 text-xs font-semibold ${textColor} truncate`}>{label}</div>
@@ -64,7 +64,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
     ? <span className="text-[#D1D5DB]">—</span>
     : <>{Math.round(v / 1000).toLocaleString('sv-SE')} <span className="text-[#9CA3AF] font-normal">kSEK</span></>
   return (
-    <div className={`flex items-center justify-between px-4 py-2.5 ${accent ? 'bg-[#F3F4F6]' : 'bg-[#F9FAFB]'}`}>
+    <div className={`flex items-center justify-between px-4 py-2.5 ${accent ? 'bg-[#EBF8FA]' : 'bg-[#F3FAFB]'}`}>
       <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{label}</span>
       <span className={`text-xs font-semibold ${accent ? 'text-[#0F0F0F]' : 'text-[#374151]'}`}>{fmt(value)}</span>
     </div>
@@ -72,7 +72,7 @@ function MobileTotalRow({ label, value, accent }: { label: string; value: number
 }
 
 export function PodSection({
-  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, sowDocItemIds, isNoPod, showOnly, mobileMonth,
+  pod, revenueRows, costRows, pods, months, allPlanRevCells, clientTrends, sowDocItemIds, isNoPod, showOnly, mobileMonth, defaultSegment,
   onSaveManualAmount, onSaveManualStatus,
   onSaveCostAmount, onSaveCostStatus,
   onAddRevenue, onEditRevenue, onDeleteRevenue,
@@ -89,15 +89,16 @@ export function PodSection({
   isNoPod?: boolean
   showOnly?: 'revenue' | 'costs'
   mobileMonth?: string
+  defaultSegment?: ItemSegment
   onSaveManualAmount:  (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveManualStatus:  (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
   onSaveCostAmount:    (itemId: string, month: string, status: PlanStatus, amount: number) => Promise<void>
   onSaveCostStatus:    (itemId: string, month: string, amount: number, status: PlanStatus) => Promise<void>
-  onAddRevenue:        (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
-  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[]) => Promise<void>
+  onAddRevenue:        (client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
+  onEditRevenue:       (rowId: string, client: string, project: string | null, podId: string | null, notes: string | null, cells: { month: string; amount: number; status: PlanStatus }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
   onDeleteRevenue:     (rowId: string) => Promise<void>
-  onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
-  onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
+  onAddCost:           (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
+  onEditCost:          (rowId: string, category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
   onDeleteCost:        (rowId: string) => Promise<void>
 }) {
   const storageKey = `plan-collapse-${pod.id}${showOnly ? '-' + showOnly : ''}`
@@ -170,41 +171,48 @@ export function PodSection({
       month: r.month, amount: r.amount, status: (r.status as PlanStatus) ?? 'F',
     }))
     const notes = data.notes.trim() || null
-    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, notes, cells)
-    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, notes, cells)
+    if (row) return onEditRevenue(row.id, data.clientName!, data.project ?? null, data.podId, notes, cells, data.segment, data.accountCode)
+    return onAddRevenue(data.clientName!, data.project ?? null, data.podId, notes, cells, data.segment, data.accountCode)
   }
+
+  const podInitialId = defaultSegment && defaultSegment !== 'services' ? null : pod.id
 
   const CS = colStyle(months.length)
 
   return (
     <>
-      <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+      <div className="hidden sm:block mb-5 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
 
-        {/* ── Pod header ─────────────────────────────────────────────────────── */}
-        <div className="grid bg-gradient-to-r from-[#0F0F0F] to-[#1F2937]" style={CS}>
-          <div className="px-4 py-2.5 flex items-center gap-2 min-w-0">
-            <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
-            <span className="text-sm font-bold text-white tracking-wide truncate">{podHeaderLabel}</span>
+        {/* ── Pod title row ───────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-[#EBF8FA]">
+          <div className="w-7 h-7 rounded-full bg-[#61b5cc] flex items-center justify-center flex-shrink-0">
+            <span className="text-[11px] font-bold text-white">{podHeaderLabel[0]}</span>
           </div>
+          <span className="text-sm font-bold text-[#0F0F0F] tracking-tight truncate">{podHeaderLabel}</span>
+        </div>
+
+        {/* ── Column header row ───────────────────────────────────────────────── */}
+        <div className="grid bg-[#CEEDF5] border-b border-[#A8DCE9]" style={CS}>
+          <div className="px-4 py-1.5" />
           {months.map((m, i) => (
-            <div key={m} className={`px-1 py-2 text-center flex flex-col items-center justify-center gap-0.5 ${i === curMonthIdx ? 'bg-white/8' : ''}`}>
+            <div key={m} className={`px-1 py-1.5 text-center flex flex-col items-center justify-center gap-0.5 ${i === curMonthIdx ? 'bg-[#61b5cc]/10' : ''}`}>
               {i === curMonthIdx && <div className="w-1 h-1 rounded-full bg-[#61b5cc]" />}
-              <span className={`text-[10px] font-semibold uppercase tracking-wider ${i === curMonthIdx ? 'text-white' : 'text-white/40'}`}>
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${i === curMonthIdx ? 'text-[#5191A4]' : 'text-[#5191A4]/50'}`}>
                 {monthLabel(m)}
               </span>
             </div>
           ))}
-          <div className="px-1 py-2.5 text-center text-[10px] font-semibold text-white/40 uppercase tracking-wider">FY</div>
+          <div className="px-1 py-1.5 text-center text-[10px] font-semibold text-[#5191A4]/50 uppercase tracking-wider">FY</div>
         </div>
 
         {/* ── Revenue section ────────────────────────────────────────────────── */}
         {showOnly !== 'costs' && <>
         <button
           onClick={toggleRevenue}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors"
         >
           <ChevronIcon open={revenueOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+          <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Revenue</span>
         </button>
 
         {/* ── Revenue rows ───────────────────────────────────────────────────── */}
@@ -287,10 +295,10 @@ export function PodSection({
         {showOnly !== 'revenue' && <>
         <button
           onClick={toggleCosts}
-          className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors"
+          className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-t border-[#F0F5F6] border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors"
         >
           <ChevronIcon open={costsOpen} />
-          <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+          <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Costs</span>
         </button>
 
         {/* ── Cost rows ──────────────────────────────────────────────────────── */}
@@ -354,8 +362,8 @@ export function PodSection({
         </>}
 
         {/* ── CB1% row ───────────────────────────────────────────────────────── */}
-        {!isNoPod && !showOnly && <div className="grid border-t-2 border-[#E5E7EB] bg-[#F8FAFC]" style={CS}>
-          <div className="px-3 py-2 text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</div>
+        {!isNoPod && !showOnly && <div className="grid border-t-2 border-[#9ED3E3] bg-[#EBF8FA]" style={CS}>
+          <div className="px-3 py-2 text-xs font-bold text-[#5191A4] uppercase tracking-wider">CB1%</div>
           {months.map((m, i) => {
             const cb = computeCB1(revTotals[i], costTotals[i])
             return (
@@ -387,18 +395,20 @@ export function PodSection({
         const mCostTotal = mIdx >= 0 ? costTotals[mIdx] : 0
         const mCB        = computeCB1(mRevTotal, mCostTotal)
         return (
-          <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm">
+          <div className="sm:hidden mb-4 bg-white rounded-2xl border border-[#9ED3E3] overflow-hidden">
             {/* Pod header */}
-            <div className="px-4 py-2.5 bg-gradient-to-r from-[#0F0F0F] to-[#1F2937] flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#61b5cc] flex-shrink-0" />
-              <span className="text-sm font-bold text-white tracking-wide truncate">{podHeaderLabel}</span>
+            <div className="px-4 py-3 bg-white border-b border-[#EBF8FA] flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-[#61b5cc] flex items-center justify-center flex-shrink-0">
+                <span className="text-[11px] font-bold text-white">{podHeaderLabel[0]}</span>
+              </div>
+              <span className="text-sm font-bold text-[#0F0F0F] tracking-tight truncate">{podHeaderLabel}</span>
             </div>
 
             {/* Revenue section */}
             {showOnly !== 'costs' && <>
-              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+              <button onClick={toggleRevenue} className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors">
                 <ChevronIcon open={revenueOpen} />
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Revenue</span>
+                <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Revenue</span>
               </button>
               {revenueOpen && <>
                 {revenueRows.map((row, i) => {
@@ -436,9 +446,9 @@ export function PodSection({
 
             {/* Costs section */}
             {showOnly !== 'revenue' && <>
-              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2 bg-[#F8FAFC] border-t border-[#E5E7EB] border-b border-[#E5E7EB] hover:bg-[#F1F5F9] transition-colors">
+              <button onClick={toggleCosts} className="w-full flex items-center gap-2 px-4 py-2.5 bg-white border-t border-[#F0F5F6] border-b border-[#F0F5F6] hover:bg-[#F8FCFD] transition-colors">
                 <ChevronIcon open={costsOpen} />
-                <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Costs</span>
+                <span className="text-[10px] font-semibold text-[#9BB8C2] uppercase tracking-wider">Costs</span>
               </button>
               {costsOpen && <>
                 {costRows.map((row, i) => {
@@ -469,8 +479,8 @@ export function PodSection({
 
             {/* CB1% */}
             {!isNoPod && !showOnly && (
-              <div className="flex items-center justify-between px-4 py-2.5 bg-[#F8FAFC] border-t-2 border-[#E5E7EB]">
-                <span className="text-xs font-bold text-[#64748B] uppercase tracking-wider">CB1%</span>
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#EBF8FA] border-t-2 border-[#9ED3E3]">
+                <span className="text-xs font-bold text-[#5191A4] uppercase tracking-wider">CB1%</span>
                 <span className={`text-xs font-bold ${mCB === null ? 'text-[#D1D5DB]' : mCB >= 20 ? 'text-[#16A34A]' : mCB >= 0 ? 'text-[#D97706]' : 'text-[#DC2626]'}`}>
                   {mCB === null ? '—' : `${Math.round(mCB)}%`}
                 </span>
@@ -485,7 +495,8 @@ export function PodSection({
         <ItemModal
           mode="manual"
           pods={pods}
-          initialPodId={pod.id}
+          initialPodId={podInitialId}
+          initialSegment={defaultSegment ?? 'services'}
           initialRows={[]}
           onClose={() => setAddingRevenue(false)}
           onSave={async data => {
@@ -503,6 +514,8 @@ export function PodSection({
           initialComment={editingRevenueRow.project ?? ''}
           initialPodId={editingRevenueRow.pod_id}
           initialNotes={editingRevenueRow.notes ?? ''}
+          initialSegment={editingRevenueRow.segment}
+          initialAccountCode={editingRevenueRow.account_code}
           initialRows={revenueRowsForModal(editingRevenueRow)}
           onClose={() => setEditingRevenueRow(null)}
           onSave={async data => {
@@ -520,10 +533,11 @@ export function PodSection({
         <CostItemModal
           mode="add"
           pods={pods}
-          defaultPodId={pod.id}
+          defaultPodId={podInitialId}
+          defaultSegment={defaultSegment}
           onClose={() => setAddingCost(false)}
-          onSave={async (category, comment, podId, cells) => {
-            await onAddCost(category, comment, podId, cells)
+          onSave={async (category, comment, podId, cells, segment, accountCode) => {
+            await onAddCost(category, comment, podId, cells, segment, accountCode)
             setAddingCost(false)
           }}
         />
@@ -535,8 +549,8 @@ export function PodSection({
           pods={pods}
           editRow={editingCostRow}
           onClose={() => setEditingCostRow(null)}
-          onSave={async (category, comment, podId, cells) => {
-            await onEditCost(editingCostRow.id, category, comment, podId, cells)
+          onSave={async (category, comment, podId, cells, segment, accountCode) => {
+            await onEditCost(editingCostRow.id, category, comment, podId, cells, segment, accountCode)
             setEditingCostRow(null)
           }}
           onDelete={async () => {

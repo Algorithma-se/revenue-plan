@@ -1,14 +1,23 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { Pod } from '@/types/database'
+import type { Pod, ItemSegment } from '@/types/database'
+import { ACCOUNT_CODES } from '@/lib/budget-accounts'
 
 export interface ItemModalSaveData {
-  podId:      string | null
-  rows:       { month: string; amount: number; status?: string }[]  // month: 'YYYY-MM-01', amount in SEK
-  notes:      string
+  podId:       string | null
+  rows:        { month: string; amount: number; status?: string }[]  // month: 'YYYY-MM-01', amount in SEK
+  notes:       string
   clientName?: string
-  project?:   string | null
+  project?:    string | null
+  segment:     ItemSegment
+  accountCode: string | null
+}
+
+const SEGMENT_LABELS: Record<ItemSegment, string> = {
+  platform:   'AOS Platform',
+  services:   'FDE Services',
+  leadership: 'Leadership',
 }
 
 export function ItemModal({
@@ -25,6 +34,8 @@ export function ItemModal({
   initialRows,       // month: 'YYYY-MM', amount in kSEK
   referenceKSEK,     // for "allocated / remaining" bar (in kSEK)
   initialNotes,
+  initialSegment,
+  initialAccountCode,
   onClose,
   onSave,
   onDelete,
@@ -39,22 +50,35 @@ export function ItemModal({
   initialRows:        { month: string; amount: string; status?: string }[]
   referenceKSEK?:     number
   initialNotes?:      string
+  initialSegment?:    ItemSegment
+  initialAccountCode?: string | null
   onClose:  () => void
   onSave:   (data: ItemModalSaveData) => Promise<void>
   onDelete?: () => Promise<void>
 }) {
-  const [rows, setRows]         = useState(initialRows)
-  const [podId, setPodId]       = useState<string | null>(initialPodId)
-  const [notes, setNotes]       = useState(initialNotes ?? '')
-  const [clientName, setClient] = useState(initialClientName ?? '')
-  const [project, setComment]   = useState(initialComment ?? '')
-  const [saving, setSaving]     = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const clientRef               = useRef<HTMLInputElement>(null)
+  const [rows, setRows]           = useState(initialRows)
+  const [segment, setSegment]     = useState<ItemSegment>(initialSegment ?? 'services')
+  const [accountCode, setCode]    = useState<string | null>(initialAccountCode ?? null)
+  const [podId, setPodId]         = useState<string | null>(initialPodId)
+  const [notes, setNotes]         = useState(initialNotes ?? '')
+  const [clientName, setClient]   = useState(initialClientName ?? '')
+  const [project, setComment]     = useState(initialComment ?? '')
+  const [saving, setSaving]       = useState(false)
+  const [deleting, setDeleting]   = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const clientRef                 = useRef<HTMLInputElement>(null)
 
   const allocatedKSEK = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
   const remainingKSEK = referenceKSEK != null ? referenceKSEK - allocatedKSEK : null
+
+  const availableCodes = ACCOUNT_CODES.filter(c => c.segment === segment && c.type === 'revenue')
+  const showPod = segment === 'services'
+
+  function handleSegmentChange(s: ItemSegment) {
+    setSegment(s)
+    setCode(null)
+    if (s !== 'services') setPodId(null)
+  }
 
   async function save() {
     if (mode === 'manual' && !clientName.trim()) {
@@ -69,12 +93,14 @@ export function ItemModal({
         .filter(r => r.month && r.amount && parseFloat(r.amount) > 0)
         .map(r => ({ month: r.month + '-01', amount: Math.round(parseFloat(r.amount) * 1000), status: r.status }))
       await onSave({
-        podId,
+        podId: showPod ? podId : null,
         rows: validRows,
         notes,
+        segment,
+        accountCode,
         ...(mode === 'manual' ? { clientName: clientName.trim(), project: project.trim() || null } : {}),
       })
-      setSaving(false)  // reset so modal stays interactive if caller doesn't close it
+      setSaving(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save')
       setSaving(false)
@@ -136,35 +162,62 @@ export function ItemModal({
               </div>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-[#9CA3AF] hover:text-[#0F0F0F] hover:bg-[#F9F9F8] transition-colors flex-shrink-0"
-          >
+          <button onClick={onClose} className="p-1 rounded-lg text-[#9CA3AF] hover:text-[#0F0F0F] hover:bg-[#F9F9F8] transition-colors flex-shrink-0">
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
             </svg>
           </button>
         </div>
 
-        {/* Pod */}
+        {/* Segment selector */}
         <div className="mb-4">
-          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
-          <select
-            value={podId ?? ''}
-            onChange={e => setPodId(e.target.value || null)}
-            className={`${inp} w-full`}
-          >
-            <option value="">No pod</option>
-            {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1.5 block">Segment</label>
+          <div className="flex gap-1.5">
+            {(['platform', 'services', 'leadership'] as ItemSegment[]).map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => handleSegmentChange(s)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  segment === s
+                    ? 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]'
+                    : 'bg-[#F9F9F8] text-[#6B7280] border-[#EBEBEB] hover:border-[#D1D5DB]'
+                }`}
+              >
+                {SEGMENT_LABELS[s]}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Pod — only for services */}
+        {showPod && (
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
+            <select value={podId ?? ''} onChange={e => setPodId(e.target.value || null)} className={`${inp} w-full`}>
+              <option value="">No pod</option>
+              {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Account code — optional */}
+        {availableCodes.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">
+              Account code <span className="font-normal normal-case">(optional, for budget tracking)</span>
+            </label>
+            <select value={accountCode ?? ''} onChange={e => setCode(e.target.value || null)} className={`${inp} w-full`}>
+              <option value="">— None —</option>
+              {availableCodes.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Month rows */}
         <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-2">Monthly allocation (kSEK)</p>
         <div className="space-y-2 mb-3">
-          {rows.length === 0 && (
-            <p className="text-xs text-[#9CA3AF] py-1">No months added yet.</p>
-          )}
+          {rows.length === 0 && <p className="text-xs text-[#9CA3AF] py-1">No months added yet.</p>}
           {rows.map((row, idx) => (
             <div key={idx} className="flex gap-2 items-center">
               <input
@@ -182,10 +235,7 @@ export function ItemModal({
                 onChange={e => setRows(r => r.map((x, i) => i === idx ? { ...x, amount: e.target.value } : x))}
                 className={`${inp} flex-1 text-right`}
               />
-              <button
-                onClick={() => setRows(r => r.filter((_, i) => i !== idx))}
-                className="text-[#D1D5DB] hover:text-[#EF4444] transition-colors p-1 flex-shrink-0"
-              >
+              <button onClick={() => setRows(r => r.filter((_, i) => i !== idx))} className="text-[#D1D5DB] hover:text-[#EF4444] transition-colors p-1 flex-shrink-0">
                 <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L8 6.586l2.293-2.293a1 1 0 111.414 1.414L9.414 8l2.293 2.293a1 1 0 01-1.414 1.414L8 9.414l-2.293 2.293a1 1 0 01-1.414-1.414L6.586 8 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
@@ -200,7 +250,7 @@ export function ItemModal({
             let nextMonth = ''
             if (last?.month) {
               const [y, mo] = last.month.split('-').map(Number)
-              const d = new Date(y, mo, 1) // mo is 1-indexed → becomes next month in 0-indexed
+              const d = new Date(y, mo, 1)
               nextMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
             }
             return [...r, { month: nextMonth, amount: '' }]
@@ -210,7 +260,7 @@ export function ItemModal({
           <span className="text-base leading-none">+</span> Add month
         </button>
 
-        {/* Running total — only when a reference amount is provided */}
+        {/* Running total */}
         {referenceKSEK != null && referenceKSEK > 0 && rows.some(r => r.amount) && (
           <div className="bg-[#F9F9F8] rounded-xl px-3 py-2.5 mb-4 flex items-center justify-between">
             <span className="text-xs text-[#6B7280]">
@@ -250,10 +300,7 @@ export function ItemModal({
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-medium text-[#6B7280] bg-white border border-[#EBEBEB] hover:border-[#D1D5DB] transition-all"
-          >
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-medium text-[#6B7280] bg-white border border-[#EBEBEB] hover:border-[#D1D5DB] transition-all">
             Cancel
           </button>
           {onDelete && (

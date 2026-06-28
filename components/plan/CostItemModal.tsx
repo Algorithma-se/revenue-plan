@@ -1,7 +1,14 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { Pod, CostRow } from '@/types/database'
+import type { Pod, CostRow, ItemSegment } from '@/types/database'
+import { ACCOUNT_CODES } from '@/lib/budget-accounts'
+
+const SEGMENT_LABELS: Record<ItemSegment, string> = {
+  platform:   'AOS Platform',
+  services:   'FDE Services',
+  leadership: 'Leadership',
+}
 
 interface MonthRow {
   month: string   // 'YYYY-MM'
@@ -12,6 +19,7 @@ export function CostItemModal({
   mode,
   pods,
   defaultPodId,
+  defaultSegment,
   editRow,
   onClose,
   onSave,
@@ -20,25 +28,37 @@ export function CostItemModal({
   mode: 'add' | 'edit'
   pods: Pod[]
   defaultPodId?: string | null
+  defaultSegment?: ItemSegment
   editRow?: CostRow
   onClose: () => void
-  onSave: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[]) => Promise<void>
+  onSave: (category: string, comment: string | null, podId: string | null, cells: { month: string; amount: number }[], segment: ItemSegment, accountCode: string | null) => Promise<void>
   onDelete?: () => Promise<void>
 }) {
-  const [category, setCategory] = useState(editRow?.category ?? '')
-  const [comment, setComment]   = useState(editRow?.comment ?? '')
-  const [podId, setPodId]       = useState<string | null>(editRow?.pod_id ?? defaultPodId ?? null)
-  const [rows, setRows]         = useState<MonthRow[]>(() => {
+  const [segment, setSegment]     = useState<ItemSegment>(editRow?.segment ?? defaultSegment ?? 'services')
+  const [accountCode, setCode]    = useState<string | null>(editRow?.account_code ?? null)
+  const [category, setCategory]   = useState(editRow?.category ?? '')
+  const [comment, setComment]     = useState(editRow?.comment ?? '')
+  const [podId, setPodId]         = useState<string | null>(editRow?.pod_id ?? defaultPodId ?? null)
+  const [rows, setRows]           = useState<MonthRow[]>(() => {
     if (!editRow) return []
     return Object.entries(editRow.cells)
       .filter(([_, c]) => c.amount > 0)
       .map(([month, c]) => ({ month: month.slice(0, 7), amount: String(Math.round(c.amount / 1000)) }))
       .sort((a, b) => a.month.localeCompare(b.month))
   })
-  const [saving, setSaving]     = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const categoryRef             = useRef<HTMLInputElement>(null)
+  const [saving, setSaving]       = useState(false)
+  const [deleting, setDeleting]   = useState(false)
+  const [error, setError]         = useState<string | null>(null)
+  const categoryRef               = useRef<HTMLInputElement>(null)
+
+  const showPod        = segment === 'services'
+  const availableCodes = ACCOUNT_CODES.filter(c => c.segment === segment && c.type === 'cost')
+
+  function handleSegmentChange(s: ItemSegment) {
+    setSegment(s)
+    setCode(null)
+    if (s !== 'services') setPodId(null)
+  }
 
   async function handleSave() {
     if (!category.trim()) { setError('Category is required.'); categoryRef.current?.focus(); return }
@@ -48,7 +68,7 @@ export function CostItemModal({
       const validRows = rows
         .filter(r => r.month && r.amount && parseFloat(r.amount) > 0)
         .map(r => ({ month: r.month + '-01', amount: Math.round(parseFloat(r.amount) * 1000) }))
-      await onSave(category.trim(), comment.trim() || null, podId, validRows)
+      await onSave(category.trim(), comment.trim() || null, showPod ? podId : null, validRows, segment, accountCode)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save.')
       setSaving(false)
@@ -111,18 +131,54 @@ export function CostItemModal({
           </button>
         </div>
 
-        {/* Pod */}
+        {/* Segment selector */}
         <div className="mb-4">
-          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
-          <select
-            value={podId ?? ''}
-            onChange={e => setPodId(e.target.value || null)}
-            className={`${inp} w-full`}
-          >
-            <option value="">No pod</option>
-            {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1.5 block">Segment</label>
+          <div className="flex gap-1.5">
+            {(['platform', 'services', 'leadership'] as ItemSegment[]).map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => handleSegmentChange(s)}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  segment === s
+                    ? 'bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]'
+                    : 'bg-[#F9F9F8] text-[#6B7280] border-[#EBEBEB] hover:border-[#D1D5DB]'
+                }`}
+              >
+                {SEGMENT_LABELS[s]}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {/* Pod — only for services */}
+        {showPod && (
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">Pod</label>
+            <select
+              value={podId ?? ''}
+              onChange={e => setPodId(e.target.value || null)}
+              className={`${inp} w-full`}
+            >
+              <option value="">No pod</option>
+              {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Account code — optional */}
+        {availableCodes.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-1 block">
+              Account code <span className="font-normal normal-case">(optional, for budget tracking)</span>
+            </label>
+            <select value={accountCode ?? ''} onChange={e => setCode(e.target.value || null)} className={`${inp} w-full`}>
+              <option value="">— None —</option>
+              {availableCodes.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Month rows */}
         <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide mb-2">Monthly amounts (kSEK)</p>

@@ -49,9 +49,10 @@ export function buildRevenueRows(
   manualItems: ManualRevenueItem[],
   planRevCells: PlanRevenueCell[],
   months: readonly string[] = FISCAL_MONTHS,
+  filterFn?: (item: ManualRevenueItem) => boolean,
 ): RevenueRow[] {
   return manualItems
-    .filter(item => item.pod_id === pod.id)
+    .filter(filterFn ?? (item => item.pod_id === pod.id))
     .sort((a, b) => a.sort - b.sort)
     .map(item => {
       const cells: Record<string, { amount: number; status: PlanStatus }> = {}
@@ -59,7 +60,12 @@ export function buildRevenueRows(
         const cell = planRevCells.find(c => c.manual_revenue_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
-      return { kind: 'manual' as const, id: item.id, client_name: item.client_name, project: item.project ?? null, pod_id: pod.id, notes: item.notes ?? null, cells }
+      return {
+        kind: 'manual' as const, id: item.id, client_name: item.client_name,
+        project: item.project ?? null, pod_id: item.pod_id,
+        notes: item.notes ?? null, segment: item.segment ?? 'services',
+        account_code: item.account_code ?? null, cells,
+      }
     })
 }
 
@@ -68,9 +74,10 @@ export function buildCostRows(
   costItems: CostItem[],
   costCells: PlanCostCell[],
   months: readonly string[] = FISCAL_MONTHS,
+  filterFn?: (item: CostItem) => boolean,
 ): CostRow[] {
   return costItems
-    .filter(item => item.pod_id === pod.id)
+    .filter(filterFn ?? (item => item.pod_id === pod.id))
     .sort((a, b) => a.sort - b.sort)
     .map(item => {
       const cells: Record<string, { amount: number; status: PlanStatus }> = {}
@@ -78,7 +85,11 @@ export function buildCostRows(
         const cell = costCells.find(c => c.cost_item_id === item.id && c.month === m)
         cells[m] = { amount: cell?.amount ?? 0, status: cell?.status ?? 'F' }
       }
-      return { id: item.id, pod_id: pod.id, category: item.category, comment: item.comment ?? null, sort: item.sort, cells }
+      return {
+        id: item.id, pod_id: item.pod_id, category: item.category,
+        comment: item.comment ?? null, sort: item.sort,
+        segment: item.segment ?? 'services', account_code: item.account_code ?? null, cells,
+      }
     })
 }
 

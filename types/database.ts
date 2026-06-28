@@ -42,6 +42,8 @@ export interface Pod {
   sort: number
 }
 
+export type ItemSegment = 'platform' | 'services' | 'leadership'
+
 export interface ManualRevenueItem {
   id: string
   pod_id: string | null
@@ -50,6 +52,8 @@ export interface ManualRevenueItem {
   notes: string | null
   sort: number
   created_at: string
+  segment: ItemSegment
+  account_code: string | null
 }
 
 export interface PlanRevenueCell {
@@ -74,6 +78,8 @@ export interface CostItem {
   comment: string | null
   sort: number
   created_at: string
+  segment: ItemSegment
+  account_code: string | null
 }
 
 export interface PlanCostCell {
@@ -215,6 +221,8 @@ export interface RevenueRow {
   project: string | null
   pod_id: string | null
   notes: string | null
+  segment: ItemSegment
+  account_code: string | null
   cells: Record<string, { amount: number; status: PlanStatus }>
 }
 
@@ -224,6 +232,8 @@ export interface CostRow {
   category: string
   comment: string | null
   sort: number
+  segment: ItemSegment
+  account_code: string | null
   cells: Record<string, { amount: number; status: PlanStatus }>
 }
 
