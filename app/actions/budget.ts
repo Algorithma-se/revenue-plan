@@ -458,12 +458,18 @@ export async function runScenarioAnalysis(
   const fyYear = fyStart + 1
   const fyLabel = `FY${fyStart}/${String(fyYear).slice(2)}`
 
-  // Include the key in the section table so the AI can echo it back for matching
-  const sectionTable = sections.map(s =>
-    `  [${s.key}] ${s.name}: budget rev ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK | budget cost ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK`
-  ).join('\n')
-
   const remainingMonths = allMonths.filter(m => m > todayStr)
+
+  function runRatePct(actual: number, budget: number): string {
+    if (budget === 0 && actual === 0) return 'n/a'
+    if (budget === 0) return 'no budget set'
+    const pct = Math.round((actual / budget - 1) * 100)
+    return `${Math.round((actual / budget) * 100)}% of budget (${pct >= 0 ? '+' : ''}${pct}% vs plan)`
+  }
+
+  const sectionTable = sections.map(s =>
+    `  [${s.key}] ${s.name}:\n    Revenue: budget ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK — ${runRatePct(s.actualRev, s.budgetRev)}\n    Costs:   budget ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK — ${runRatePct(s.actualCost, s.budgetCost)}`
+  ).join('\n')
 
   const prompt = `You are Allie, CFO assistant for Algorithma (Swedish tech firm).
 
@@ -472,7 +478,7 @@ YTD months covered: ${ytdMonths.length} (${ytdMonths[0].slice(0, 7)} to ${ytdMon
 Remaining FY months: ${remainingMonths.length}.
 All amounts in kSEK (thousands SEK).
 
-Section breakdown (YTD) — each line shows [key] name: numbers:
+Section breakdown (YTD) — showing budget, actual, and YTD run rate:
 ${sectionTable}
 
 Total: budget rev ${fmt(total.budgetRev)} / actual ${fmt(total.actualRev)} kSEK | budget cost ${fmt(total.budgetCost)} / actual ${fmt(total.actualCost)} kSEK
@@ -486,7 +492,7 @@ Respond with ONLY valid JSON matching this exact schema — no markdown, no extr
   ],
   "actions": ["action 1", "action 2", "action 3"],
   "adjustments": [
-    { "section": "<section name>", "suggestion": "specific budget adjustment for remaining months" }
+    { "section": "<section name>", "suggestion": "specific budget adjustment" }
   ],
   "scenarioAdjustments": [
     { "key": "<copy key from brackets above>", "name": "<section name>", "lineType": "revenue or cost", "pct": <integer -80 to 80>, "reason": "one sentence" }
@@ -495,8 +501,8 @@ Respond with ONLY valid JSON matching this exact schema — no markdown, no extr
 
 Include one sections entry per section above. Copy keys exactly from the brackets.
 actions: top 3 recommended actions, direct and specific.
-adjustments: text suggestions, one per section where warranted.
-scenarioAdjustments: numeric adjustments to apply to remaining ${remainingMonths.length} months when creating a revised scenario. Only include where performance clearly warrants a change. pct is the % to adjust the remaining months budget (negative = reduce, positive = increase).
+adjustments: qualitative suggestions per section.
+scenarioAdjustments: IMPORTANT — for every section where revenue or cost deviates meaningfully from budget, provide a pct. This pct is applied to ALL months of the year (past and future) to create a realistic revised full-year scenario. Start from the YTD run rate shown above, then use your judgment: if the variance looks structural (ongoing underperformance, persistent cost overrun) use a pct close to the run rate; if it looks like a timing issue or one-off, be more conservative. Include BOTH revenue and cost entries for each affected section. Be bold where the data clearly shows a structural gap.
 Be honest and direct. No fluff.`
 
   const client = new Anthropic({ apiKey })
@@ -588,52 +594,25 @@ export async function createAdjustedScenario(
   sourceScenarioId: string,
   fyStart:          number,
   name:             string,
+  adjustments:      ScenarioAdjustment[],
 ): Promise<CreateAdjustedResult> {
   const supabase = await createAdminSupabase()
 
-  // Build lookup by key and by name (AI may echo name instead of UUID key)
-  // Load source lines + cells and YTD actuals
+  // Build lookup by UUID key and by pod name (AI sometimes echoes name instead of UUID)
+  const adjByKey:  Record<string, number> = {}
+  const adjByName: Record<string, number> = {}
+  for (const a of adjustments) {
+    adjByKey[`${a.key}:${a.lineType}`]                 = a.pct
+    adjByName[`${a.name.toLowerCase()}:${a.lineType}`] = a.pct
+  }
+
   const { lines, cells } = await getBudgetData(sourceScenarioId)
-  const actuals = await getPodActuals(fyStart)
+  const { data: podRows } = await supabase.from('pods').select('id, name')
+  const podNameById: Record<string, string> = {}
+  for (const p of podRows ?? []) podNameById[p.id] = p.name.toLowerCase()
 
   const allMonths = getFiscalMonths(fyStart)
-  const today     = new Date()
-  const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const ytdMonths = allMonths.filter(m => m <= todayStr)
-  const remaining = new Set(allMonths.filter(m => m > todayStr))
 
-  // Aggregate YTD actuals and budget per podKey + lineType
-  const ytdActualRev:  Record<string, number> = {}
-  const ytdActualCost: Record<string, number> = {}
-  const ytdBudgRev:    Record<string, number> = {}
-  const ytdBudgCost:   Record<string, number> = {}
-
-  for (const [podKey, monthData] of Object.entries(actuals)) {
-    for (const m of ytdMonths) {
-      const a = monthData[m]
-      if (a) {
-        ytdActualRev[podKey]  = (ytdActualRev[podKey]  ?? 0) + a.revA + a.revB
-        ytdActualCost[podKey] = (ytdActualCost[podKey] ?? 0) + a.costA + a.costB
-      }
-    }
-  }
-  for (const line of lines) {
-    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    const lineCells = cells[line.id] ?? {}
-    for (const m of ytdMonths) {
-      const amt = lineCells[m] ?? 0
-      if (line.line_type === 'revenue') ytdBudgRev[pk]  = (ytdBudgRev[pk]  ?? 0) + amt
-      else                              ytdBudgCost[pk] = (ytdBudgCost[pk] ?? 0) + amt
-    }
-  }
-
-  // Run-rate ratio: actual ÷ budget, capped 5%–300% to avoid wild extrapolation
-  function runRate(actual: number, budget: number): number {
-    if (budget <= 0) return 1
-    return Math.max(0.05, Math.min(3.0, actual / budget))
-  }
-
-  // Create new scenario
   const { data: scenario, error: sErr } = await supabase
     .from('budget_scenarios')
     .insert({ name, fy_start: fyStart })
@@ -642,11 +621,14 @@ export async function createAdjustedScenario(
   if (sErr || !scenario) return { ok: false, error: sErr?.message ?? 'Failed to create scenario' }
 
   for (let i = 0; i < lines.length; i++) {
-    const line   = lines[i]
-    const podKey = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
-    const ratio  = line.line_type === 'revenue'
-      ? runRate(ytdActualRev[podKey] ?? 0, ytdBudgRev[podKey] ?? 0)
-      : runRate(ytdActualCost[podKey] ?? 0, ytdBudgCost[podKey] ?? 0)
+    const line    = lines[i]
+    const podKey  = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    const podName = line.segment === 'services'
+      ? (line.pod_id ? (podNameById[line.pod_id] ?? '') : '')
+      : line.segment
+    const pct = adjByKey[`${podKey}:${line.line_type}`]
+      ?? adjByName[`${podName}:${line.line_type}`]
+      ?? 0
 
     const { data: newLine, error: lErr } = await supabase
       .from('budget_lines')
@@ -669,7 +651,7 @@ export async function createAdjustedScenario(
       .map(m => ({
         budget_line_id: newLine.id,
         month:          m,
-        amount:         Math.round((sourceCells[m] ?? 0) * ratio),
+        amount:         pct !== 0 ? Math.round((sourceCells[m] ?? 0) * (1 + pct / 100)) : (sourceCells[m] ?? 0),
       }))
 
     if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
