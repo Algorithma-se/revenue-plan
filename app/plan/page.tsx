@@ -19,6 +19,7 @@ import { AISummary } from '@/components/plan/AISummary'
 import { PlanChart } from '@/components/plan/PlanChart'
 import { RevenueDonut } from '@/components/plan/RevenueDonut'
 import { PresentationMode } from '@/components/plan/PresentationMode'
+import { AnalysisModal } from '@/components/budget/AnalysisModal'
 
 // ─── Raw data state ────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ export default function PlanPage() {
   const [fyStart, setFyStart]           = useState(currentFyStart)
   const [presentMode, setPresentMode]   = useState(false)
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   const didInitialSort                  = useRef(false)
 
   const months = getFiscalMonths(fyStart)
@@ -420,6 +422,15 @@ export default function PlanPage() {
                 <path d="M1 3a1 1 0 011-1h12a1 1 0 011 1v7a1 1 0 01-1 1H9v1h2a.5.5 0 010 1H5a.5.5 0 010-1h2v-1H2a1 1 0 01-1-1V3zm13 0H2v7h12V3z" />
               </svg>
             </button>
+            <button
+              onClick={() => setAnalysisOpen(true)}
+              className="p-1.5 rounded-lg text-[#6B7280] hover:text-[#0F0F0F] hover:bg-white border border-transparent hover:border-[#EBEBEB] transition-all"
+              title="Budget analysis"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 01-1 1H3a1 1 0 01-1-1v-2zm5-4a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1H8a1 1 0 01-1-1V7zm5-4a1 1 0 011-1h2a1 1 0 011 1v10a1 1 0 01-1 1h-2a1 1 0 01-1-1V3z" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -646,6 +657,12 @@ export default function PlanPage() {
           onSaveManualCellStatus={saveManualCellStatus}
         />
       )}
+
+      <AnalysisModal
+        open={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
+        fyStart={fyStart}
+      />
     </div>
   )
 }

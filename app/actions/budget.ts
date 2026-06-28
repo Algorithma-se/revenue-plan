@@ -1,5 +1,6 @@
 'use server'
 
+import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase-admin'
 import { getFiscalMonths } from '@/lib/plan-utils'
 
@@ -227,4 +228,219 @@ export async function getPodActuals(fyStart: number): Promise<PodActuals> {
   }
 
   return result
+}
+
+// ─── Scenario Analysis (AI) ───────────────────────────────────────────────────
+
+export interface AnalysisSection {
+  key:        string
+  name:       string
+  budgetRev:  number
+  actualRev:  number
+  budgetCost: number
+  actualCost: number
+  narrative:  string
+}
+
+export interface ScenarioAnalysis {
+  headline:    string
+  sections:    AnalysisSection[]
+  actions:     string[]
+  adjustments: { section: string; suggestion: string }[]
+  generatedAt: string
+}
+
+export async function getScenarioAnalysis(
+  scenarioId: string,
+  fyStart:    number,
+): Promise<ScenarioAnalysis | null> {
+  const supabase = await createAdminSupabase()
+  const { data } = await supabase
+    .from('scenario_analyses')
+    .select('headline, sections, actions, adjustments, generated_at')
+    .eq('scenario_id', scenarioId)
+    .eq('fy_start', fyStart)
+    .maybeSingle()
+  if (!data) return null
+  return {
+    headline:    data.headline,
+    sections:    data.sections,
+    actions:     data.actions,
+    adjustments: data.adjustments,
+    generatedAt: data.generated_at,
+  }
+}
+
+export async function runScenarioAnalysis(
+  scenarioId: string,
+  fyStart:    number,
+): Promise<ScenarioAnalysis> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured')
+
+  const supabase = await createAdminSupabase()
+
+  // ── Load data ────────────────────────────────────────────────────────────────
+  const [{ lines, cells }, actuals, scenarios] = await Promise.all([
+    getBudgetData(scenarioId),
+    getPodActuals(fyStart),
+    getBudgetScenarios(fyStart),
+  ])
+
+  const scenarioName = scenarios.find(s => s.id === scenarioId)?.name ?? 'Unknown'
+
+  // ── YTD months (fiscal months up to and including current month) ─────────────
+  const allMonths = getFiscalMonths(fyStart)
+  const today     = new Date()
+  const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const ytdMonths = allMonths.filter(m => m <= todayStr)
+
+  if (ytdMonths.length === 0) {
+    throw new Error('No YTD months available for analysis — fiscal year has not started yet')
+  }
+
+  // ── Aggregate budget by podKey for YTD months ────────────────────────────────
+  // podKey mirrors getPodActuals: pod_id for services, '__platform__' / '__leadership__' for fixed segments
+  const budgetByKey: Record<string, { rev: number; cost: number }> = {}
+
+  for (const line of lines) {
+    const key = line.segment === 'services'
+      ? (line.pod_id ?? '__no_pod__')
+      : `__${line.segment}__`
+    if (!budgetByKey[key]) budgetByKey[key] = { rev: 0, cost: 0 }
+    const lineTotal = ytdMonths.reduce((s, m) => s + (cells[line.id]?.[m] ?? 0), 0)
+    if (line.line_type === 'revenue') budgetByKey[key].rev  += lineTotal
+    else                              budgetByKey[key].cost += lineTotal
+  }
+
+  // ── Build sections ordered: platform → services pods (by sort) → leadership ──
+  // Collect pod metadata from budget lines
+  const podMeta: { id: string; name: string; sort: number }[] = []
+  const seenPods = new Set<string>()
+  for (const line of lines) {
+    if (line.segment === 'services' && line.pod_id && !seenPods.has(line.pod_id)) {
+      seenPods.add(line.pod_id)
+      podMeta.push({ id: line.pod_id, name: line.pod_name ?? line.pod_id, sort: line.sort })
+    }
+  }
+  podMeta.sort((a, b) => a.sort - b.sort)
+
+  const sectionDefs: { key: string; name: string }[] = [
+    { key: '__platform__',   name: 'AOS Platform' },
+    ...podMeta.map(p => ({ key: p.id, name: p.name })),
+    { key: '__leadership__', name: 'Leadership' },
+  ]
+
+  const fmt = (n: number) => Math.round(n / 1000).toLocaleString('sv-SE')
+
+  const sections = sectionDefs.map(({ key, name }) => {
+    const budget = budgetByKey[key] ?? { rev: 0, cost: 0 }
+    const actual = actuals[key] ?? {}
+    const actualRev  = ytdMonths.reduce((s, m) => s + (actual[m]?.revA ?? 0) + (actual[m]?.revB ?? 0), 0)
+    const actualCost = ytdMonths.reduce((s, m) => s + (actual[m]?.costA ?? 0) + (actual[m]?.costB ?? 0), 0)
+    return { key, name, budgetRev: budget.rev, actualRev, budgetCost: budget.cost, actualCost }
+  }).filter(s => s.budgetRev + s.budgetCost + s.actualRev + s.actualCost > 0)
+
+  const total = sections.reduce(
+    (acc, s) => ({
+      budgetRev:  acc.budgetRev  + s.budgetRev,
+      actualRev:  acc.actualRev  + s.actualRev,
+      budgetCost: acc.budgetCost + s.budgetCost,
+      actualCost: acc.actualCost + s.actualCost,
+    }),
+    { budgetRev: 0, actualRev: 0, budgetCost: 0, actualCost: 0 },
+  )
+
+  const fyYear = fyStart + 1
+  const fyLabel = `FY${fyStart}/${String(fyYear).slice(2)}`
+
+  const sectionTable = sections.map(s =>
+    `  ${s.name}: budget rev ${fmt(s.budgetRev)} / actual ${fmt(s.actualRev)} kSEK | budget cost ${fmt(s.budgetCost)} / actual ${fmt(s.actualCost)} kSEK`
+  ).join('\n')
+
+  const prompt = `You are Allie, CFO assistant for Algorithma (Swedish tech firm).
+
+Analyse YTD performance vs the "${scenarioName}" budget scenario for ${fyLabel}.
+YTD months covered: ${ytdMonths.length} (${ytdMonths[0].slice(0, 7)} to ${ytdMonths[ytdMonths.length - 1].slice(0, 7)}).
+All amounts in kSEK (thousands SEK).
+
+Section breakdown (YTD):
+${sectionTable}
+
+Total: budget rev ${fmt(total.budgetRev)} / actual ${fmt(total.actualRev)} kSEK | budget cost ${fmt(total.budgetCost)} / actual ${fmt(total.actualCost)} kSEK
+Total budget EBIT: ${fmt(total.budgetRev - total.budgetCost)} kSEK | actual EBIT: ${fmt(total.actualRev - total.actualCost)} kSEK
+
+Respond with ONLY valid JSON in this exact schema — no markdown, no extra keys:
+{
+  "headline": "single sharp sentence on overall YTD performance",
+  "sections": [
+    { "key": "<key>", "name": "<name>", "narrative": "2-3 sentence assessment for this section" }
+  ],
+  "actions": ["action 1", "action 2", "action 3"],
+  "adjustments": [
+    { "section": "<name>", "suggestion": "specific budget adjustment suggestion for remaining months" }
+  ]
+}
+
+sections array must include an entry for every section listed above (same keys and names).
+actions: top 3 recommended actions, direct and specific.
+adjustments: one entry per section where a meaningful adjustment is warranted.
+Be honest and direct. No fluff.`
+
+  const client = new Anthropic({ apiKey })
+  const message = await client.messages.create({
+    model:      'claude-haiku-4-5-20251001',
+    max_tokens: 1200,
+    messages:   [{ role: 'user', content: prompt }],
+  })
+
+  const block = message.content[0]
+  if (block.type !== 'text') throw new Error('Unexpected AI response type')
+
+  let aiResponse: { headline: string; sections: { key: string; name: string; narrative: string }[]; actions: string[]; adjustments: { section: string; suggestion: string }[] }
+  try {
+    aiResponse = JSON.parse(block.text)
+  } catch {
+    throw new Error(`AI returned non-JSON: ${block.text.slice(0, 200)}`)
+  }
+
+  // Merge AI narratives back with the numeric data we computed
+  const mergedSections: AnalysisSection[] = sections.map(s => {
+    const aiSection = aiResponse.sections.find(a => a.key === s.key)
+    return {
+      key:        s.key,
+      name:       s.name,
+      budgetRev:  s.budgetRev,
+      actualRev:  s.actualRev,
+      budgetCost: s.budgetCost,
+      actualCost: s.actualCost,
+      narrative:  aiSection?.narrative ?? '',
+    }
+  })
+
+  const parsed: Omit<ScenarioAnalysis, 'generatedAt'> = {
+    headline:    aiResponse.headline,
+    sections:    mergedSections,
+    actions:     aiResponse.actions,
+    adjustments: aiResponse.adjustments,
+  }
+
+  const generatedAt = new Date().toISOString()
+
+  await supabase
+    .from('scenario_analyses')
+    .upsert(
+      {
+        scenario_id:  scenarioId,
+        fy_start:     fyStart,
+        headline:     parsed.headline,
+        sections:     parsed.sections,
+        actions:      parsed.actions,
+        adjustments:  parsed.adjustments,
+        generated_at: generatedAt,
+      },
+      { onConflict: 'scenario_id,fy_start' },
+    )
+
+  return { ...parsed, generatedAt }
 }
