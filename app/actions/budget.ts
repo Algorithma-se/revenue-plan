@@ -612,6 +612,37 @@ export async function createAdjustedScenario(
   for (const p of podRows ?? []) podNameById[p.id] = p.name.toLowerCase()
 
   const allMonths = getFiscalMonths(fyStart)
+  const today     = new Date()
+  const todayStr  = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const ytdMonths = new Set(allMonths.filter(m => m <= todayStr))
+
+  // YTD run-rate ratio per pod+lineType so past months reflect actuals proportionally
+  const actuals = await getPodActuals(fyStart)
+  const ytdActualRev:  Record<string, number> = {}
+  const ytdActualCost: Record<string, number> = {}
+  const ytdBudgRev:    Record<string, number> = {}
+  const ytdBudgCost:   Record<string, number> = {}
+  for (const [pk, monthData] of Object.entries(actuals)) {
+    for (const m of ytdMonths) {
+      const a = monthData[m]
+      if (a) {
+        ytdActualRev[pk]  = (ytdActualRev[pk]  ?? 0) + a.revA + a.revB
+        ytdActualCost[pk] = (ytdActualCost[pk] ?? 0) + a.costA + a.costB
+      }
+    }
+  }
+  for (const line of lines) {
+    const pk = line.segment === 'services' ? (line.pod_id ?? '__no_pod__') : `__${line.segment}__`
+    for (const m of ytdMonths) {
+      const amt = cells[line.id]?.[m] ?? 0
+      if (line.line_type === 'revenue') ytdBudgRev[pk]  = (ytdBudgRev[pk]  ?? 0) + amt
+      else                              ytdBudgCost[pk] = (ytdBudgCost[pk] ?? 0) + amt
+    }
+  }
+  function ytdRatio(actual: number, budget: number): number {
+    if (budget <= 0) return 1
+    return Math.max(0.05, Math.min(5.0, actual / budget))
+  }
 
   const { data: scenario, error: sErr } = await supabase
     .from('budget_scenarios')
@@ -626,9 +657,15 @@ export async function createAdjustedScenario(
     const podName = line.segment === 'services'
       ? (line.pod_id ? (podNameById[line.pod_id] ?? '') : '')
       : line.segment
-    const pct = adjByKey[`${podKey}:${line.line_type}`]
+
+    // Past months: scale by YTD run rate so pod totals match actuals
+    // Future months: apply Allie's reasoned pct
+    const futurePct  = adjByKey[`${podKey}:${line.line_type}`]
       ?? adjByName[`${podName}:${line.line_type}`]
       ?? 0
+    const pastRatio  = line.line_type === 'revenue'
+      ? ytdRatio(ytdActualRev[podKey] ?? 0, ytdBudgRev[podKey] ?? 0)
+      : ytdRatio(ytdActualCost[podKey] ?? 0, ytdBudgCost[podKey] ?? 0)
 
     const { data: newLine, error: lErr } = await supabase
       .from('budget_lines')
@@ -651,7 +688,11 @@ export async function createAdjustedScenario(
       .map(m => ({
         budget_line_id: newLine.id,
         month:          m,
-        amount:         pct !== 0 ? Math.round((sourceCells[m] ?? 0) * (1 + pct / 100)) : (sourceCells[m] ?? 0),
+        amount: ytdMonths.has(m)
+          ? Math.round((sourceCells[m] ?? 0) * pastRatio)
+          : futurePct !== 0
+            ? Math.round((sourceCells[m] ?? 0) * (1 + futurePct / 100))
+            : (sourceCells[m] ?? 0),
       }))
 
     if (newCells.length > 0) await supabase.from('budget_cells').insert(newCells)
